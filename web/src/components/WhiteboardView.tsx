@@ -25,8 +25,17 @@ import {
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
 import { Database } from '@/types/database.types'
+import { 
+  ElementProperties,
+  getEffectiveFillOpacity,
+  getEffectiveStrokeOpacity,
+  getEffectiveCornerRadius
+} from '@/types/element.types'
 import CreateTaskModal from './CreateTaskModal'
 import InputModal from './InputModal'
+import MarkdownEditModal from './MarkdownEditModal'
+import ThemeToggle from './ThemeToggle'
+import MarkdownText from './MarkdownText'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 
 type Tables = Database['public']['Tables']
@@ -245,7 +254,7 @@ type ElementColorKey = keyof typeof ELEMENT_COLORS
 const DEFAULT_ELEMENT_COLORS: Record<string, ElementColorKey> = {
   rectangle: 'primary',
   circle: 'secondary', 
-  text: 'accent',
+  text: 'gray-dark',
   arrow: 'gray',
   sticky_note: 'warning'
 }
@@ -279,6 +288,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   const [stageScale, setStageScale] = useState(1)
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 })
   const [editingElement, setEditingElement] = useState<{ id: string; text: string } | null>(null)
+  const [editingMarkdownElement, setEditingMarkdownElement] = useState<{ id: string; text: string } | null>(null)
   const [selectedColor, setSelectedColor] = useState<ElementColorKey>('primary')
   const [customColor, setCustomColor] = useState('#6366f1')
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; elementId: string } | null>(null)
@@ -637,11 +647,24 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       height: type === 'text' ? 50 : 100,
       rotation: 0,
       properties: {
-        fill: fillColor || (type === 'sticky_note' ? '#fef3c7' : '#6366f1'),
-        stroke: strokeColor || '#334155',
-        strokeWidth: 2,
-        text: type === 'text' || type === 'sticky_note' ? 'Double click to edit' : '',
+        // Existing properties
+        fill: type === 'text' ? (fillColor || 'var(--color-foreground)') : (fillColor || (type === 'sticky_note' ? '#fef3c7' : '#6366f1')),
+        stroke: type === 'text' ? '' : (strokeColor || '#334155'),
+        strokeWidth: type === 'text' ? 0 : 2,
+        text: type === 'text' ? '# Markdown Text\n\nDouble click to edit\n\n- **Bold text**\n- *Italic text*\n- ***Bold italic***' : (type === 'sticky_note' ? 'Double click to edit' : ''),
+        fontSize: type === 'text' ? 16 : undefined,
+        fontWeight: type === 'text' ? 'normal' : undefined,
         colorKey, // Store the theme color key for future reference
+        
+        // New style properties with sensible defaults
+        fillMode: 'filled',
+        strokeStyle: 'solid',
+        opacity: 1,
+        cornerRadiusPreset: 'rounded',
+        cornerRadius: type === 'rectangle' ? 3 : 0,
+        fillOpacity: 1,
+        strokeOpacity: 1,
+        
         ...properties
       },
       layer_index: elements.length,
@@ -721,6 +744,17 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       stroke: strokeColor,
       colorKey: 'custom' // Mark as custom color
     }
+    
+    await updateElementInDB(elementId, { properties: updatedProperties })
+  }
+
+  // Update element style properties
+  async function updateElementProperties(elementId: string, newProperties: Partial<ElementProperties>) {
+    const element = elements.find(el => el.id === elementId)
+    if (!element) return
+
+    const currentProperties = (element.properties as ElementProperties) || {}
+    const updatedProperties = { ...currentProperties, ...newProperties }
     
     await updateElementInDB(elementId, { properties: updatedProperties })
   }
@@ -1120,10 +1154,29 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     ))
   }
 
+  // Helper function to convert stroke style to Konva dash array
+  function getStrokeDashArray(strokeStyle: string | undefined, strokeWidth: number): number[] | undefined {
+    switch (strokeStyle) {
+      case 'dashed':
+        return [strokeWidth * 3, strokeWidth * 2]
+      case 'dotted':
+        return [strokeWidth, strokeWidth]
+      default:
+        return undefined
+    }
+  }
+
   function renderElement(element: WhiteboardElement) {
     const isSelected = selectedElementIds.includes(element.id)
-    const props = element.properties as Record<string, unknown>
+    const props = element.properties as ElementProperties || {}
 
+    // Get effective style values
+    const fillOpacity = getEffectiveFillOpacity(props)
+    const strokeOpacity = getEffectiveStrokeOpacity(props)
+    const strokeWidth = isSelected ? 3 : (props.strokeWidth || 2)
+    const strokeColor = isSelected ? 'var(--color-destructive-500)' : (props.stroke as string)
+    const dashArray = getStrokeDashArray(props.strokeStyle, strokeWidth)
+    
     const baseProps = {
       x: element.x || 0,
       y: element.y || 0,
@@ -1135,18 +1188,23 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => handleElementDrag(element.id, e.target.attrs),
       onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => handleElementDragEnd(element.id, e.target.attrs),
       onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>) => handleElementRightClick(element.id, e),
-      stroke: isSelected ? 'var(--color-destructive-500)' : (props.stroke as string),
-      strokeWidth: isSelected ? 3 : (props.strokeWidth as number) || 2
+      stroke: strokeColor,
+      strokeWidth: strokeWidth,
+      dash: dashArray,
+      opacity: props.opacity || 1
     }
 
     switch (element.type) {
       case 'rectangle':
+        const cornerRadius = getEffectiveCornerRadius(props, element.width || 0, element.height || 0)
         return (
           <Rect
             key={element.id}
             {...baseProps}
             fill={props.fill as string}
-            cornerRadius={3}
+            fillOpacity={fillOpacity}
+            strokeOpacity={strokeOpacity}
+            cornerRadius={cornerRadius}
           />
         )
       case 'sticky_note':
@@ -1161,7 +1219,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
               {...baseProps}
               text={(props.text as string) || 'Double click to edit'}
               fontSize={(props.fontSize as number) || 14}
-              fill={(props.textColor as string) || 'var(--color-gray-800)'}
+              fill="var(--color-gray-800)"
               align="center"
               verticalAlign="middle"
               fontFamily="var(--font-sans)"
@@ -1179,23 +1237,33 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
             {...baseProps}
             radius={(element.width || 0) / 2}
             fill={props.fill as string}
+            fillOpacity={fillOpacity}
+            strokeOpacity={strokeOpacity}
             onDblClick={() => setShowComingSoonModal(true)}
           />
         )
       case 'text':
         return (
-          <Text
+          <MarkdownText
             key={element.id}
-            {...baseProps}
-            text={(props.text as string) || 'Text'}
+            text={(props.text as string) || '# Markdown Text\n\nDouble click to edit\n\n- **Bold text**\n- *Italic text*\n- ***Bold italic***'}
+            x={element.x || 0}
+            y={element.y || 0}
+            width={element.width || 200}
+            height={element.height || 100}
             fontSize={(props.fontSize as number) || 16}
-            fill={(props.textColor as string) || (props.fill as string) || 'var(--color-foreground)'}
-            align="center"
-            verticalAlign="middle"
-            fontFamily="var(--font-sans)"
+            fill={(props.fill as string) || 'var(--color-foreground)'}
+            fontFamily="Arial, sans-serif"
+            align="left"
+            verticalAlign="top"
+            onClick={(e: Konva.KonvaEventObject<MouseEvent>) => handleElementClick(element.id, e)}
             onDblClick={() => {
-              setEditingElement({ id: element.id, text: (props.text as string) || '' })
+              setEditingMarkdownElement({ id: element.id, text: (props.text as string) || '' })
             }}
+            draggable={activeTool === 'select'}
+            onDragMove={(e: Konva.KonvaEventObject<DragEvent>) => handleElementDrag(element.id, e.target.attrs)}
+            onDragEnd={(e: Konva.KonvaEventObject<DragEvent>) => handleElementDragEnd(element.id, e.target.attrs)}
+            onContextMenu={(e: Konva.KonvaEventObject<MouseEvent>) => handleElementRightClick(element.id, e)}
           />
         )
       case 'arrow':
@@ -1226,9 +1294,10 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   // Render left panel
   function renderLeftPanel() {
     return (
-      <div className="w-64 bg-card border-r border-border flex flex-col">
+      <div className="w-64 whimsical-card border-r border-purple-200 dark:border-purple-700 flex flex-col">
+
         {/* Tools Section */}
-        <div className="p-4 border-b border-border">
+        <div className="p-4 border-b border-purple-200 dark:border-purple-700">
           <h3 className="text-sm font-medium text-foreground mb-3">Tools</h3>
           <div className="grid grid-cols-3 gap-2">
             {tools.map(({ type, icon: Icon, label }) => {
@@ -1245,15 +1314,15 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
                 <button
                   key={type}
                   onClick={() => handleToolChange(type)}
-                  className={`p-3 rounded-lg transition-all duration-200 flex flex-col items-center gap-1 ${
+                  className={`p-3 rounded-lg transition-colors duration-200 flex flex-col items-center gap-1 ${
                     activeTool === type
-                      ? 'bg-primary text-primary-foreground shadow-md'
-                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                      ? 'bg-purple-500 text-white'
+                      : 'text-muted-foreground hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:text-purple-700 dark:hover:text-purple-300'
                   }`}
                   title={`${label} (${shortcutMap[type]})`}
                 >
                   <Icon className="h-4 w-4" />
-                  <span className="text-xs">{shortcutMap[type]}</span>
+                  <span className="text-xs font-medium">{shortcutMap[type]}</span>
                 </button>
               )
             })}
@@ -1261,7 +1330,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
         </div>
 
         {/* Colors Section */}
-        <div className="p-4 border-b border-border">
+        <div className="p-4 border-b border-purple-200 dark:border-purple-700">
           <h3 className="text-sm font-medium text-foreground mb-3">Colors</h3>
           
           {/* Primary 4 Colors */}
@@ -1280,13 +1349,13 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
                       selectedElementIds.forEach(id => changeElementColor(id, colorKey))
                     }
                   }}
-                  className={`p-2 rounded-lg transition-all duration-200 hover:scale-105 ${
-                    selectedColor === colorKey ? 'ring-2 ring-primary scale-105' : 'hover:ring-2 hover:ring-gray-300'
+                  className={`p-2 rounded-lg transition-colors duration-200 ${
+                    selectedColor === colorKey ? 'ring-2 ring-purple-400 dark:ring-purple-500' : 'hover:ring-1 hover:ring-purple-200 dark:hover:ring-purple-600'
                   }`}
                   title={config.name}
                 >
                   <div 
-                    className="w-8 h-8 rounded-full mx-auto transition-all duration-200"
+                    className="w-8 h-8 rounded-full mx-auto"
                     style={{ 
                       backgroundColor: fillColor,
                       border: `2px solid ${strokeColor}`
@@ -1312,13 +1381,13 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
                       selectedElementIds.forEach(id => changeElementColor(id, colorKey as ElementColorKey))
                     }
                   }}
-                  className={`p-1 rounded transition-all duration-200 hover:scale-110 ${
-                    selectedColor === colorKey ? 'ring-2 ring-primary scale-110' : ''
+                  className={`p-1 rounded transition-colors duration-200 ${
+                    selectedColor === colorKey ? 'ring-2 ring-purple-400 dark:ring-purple-500' : 'hover:ring-1 hover:ring-purple-200 dark:hover:ring-purple-600'
                   }`}
                   title={config.name}
                 >
                   <div 
-                    className="w-6 h-6 rounded border transition-all duration-200"
+                    className="w-6 h-6 rounded border-2"
                     style={{ 
                       backgroundColor: fillColor,
                       borderColor: strokeColor
@@ -1330,7 +1399,8 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
           </div>
 
           {/* Custom Color Picker */}
-          <div className="border-t border-border pt-3">
+          <div className="border-t border-purple-200 dark:border-purple-700 pt-3">
+            <div className="text-xs font-medium text-foreground mb-2">Custom</div>
             <div className="flex gap-2 items-center mb-2">
               <input
                 type="color"
@@ -1341,7 +1411,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
                     selectedElementIds.forEach(id => changeElementToCustomColor(id, e.target.value))
                   }
                 }}
-                className="w-8 h-8 rounded border border-border cursor-pointer flex-shrink-0"
+                className="w-8 h-8 rounded border border-purple-200 dark:border-purple-600 cursor-pointer flex-shrink-0"
                 title="Custom color picker"
               />
               <input
@@ -1354,7 +1424,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
                   }
                 }}
                 placeholder="#ffffff"
-                className="flex-1 px-2 py-1 text-xs border border-border rounded bg-input text-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+                className="flex-1 min-w-0 px-2 py-1 text-xs border border-border rounded bg-input text-foreground focus:outline-none focus:ring-1 focus:ring-purple-500"
                 pattern="^#[0-9A-Fa-f]{6}$"
               />
             </div>
@@ -1366,7 +1436,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
 
         {/* Selection Actions */}
         {selectedElementIds.length > 0 && (
-          <div className="p-4 border-b border-border">
+          <div className="p-4 border-b border-purple-200 dark:border-purple-700">
             <h3 className="text-sm font-medium text-foreground mb-3">
               Selection ({selectedElementIds.length})
             </h3>
@@ -1382,11 +1452,12 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
                 </p>
               </div>
             )}
+
             
             <div className="space-y-2">
               <button
                 onClick={() => setIsCreateTaskModalOpen(true)}
-                className="w-full flex items-center gap-3 px-3 py-2 bg-success-600 text-success-50 rounded-md hover:bg-success-700 transition-colors text-sm font-medium"
+                className="w-full flex items-center gap-2 px-3 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors text-sm font-medium"
               >
                 <Plus className="h-4 w-4" />
                 Create Task
@@ -1395,7 +1466,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
                 onClick={() => {
                   duplicateElements()
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2 bg-accent text-accent-foreground rounded-md hover:bg-accent/80 transition-colors text-sm"
+                className="w-full flex items-center gap-2 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors text-sm"
               >
                 <Copy className="h-4 w-4" />
                 Duplicate
@@ -1405,7 +1476,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
                   selectedElementIds.forEach(id => deleteElement(id))
                   clearSelection()
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/80 transition-colors text-sm"
+                className="w-full flex items-center gap-2 px-3 py-2 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/80 transition-colors text-sm"
               >
                 <Trash2 className="h-4 w-4" />
                 Remove
@@ -1419,26 +1490,194 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   }
 
   return (
-    <div className="h-full flex bg-background">
+    <div className="h-full flex relative z-10 bg-card">
       {/* Left Panel */}
       {renderLeftPanel()}
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Toolbar */}
-        <div className="bg-card border-b border-border p-3 flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
+        <div className="bg-card border-b border-purple-200 dark:border-purple-700 p-3 flex items-center justify-between">
+          <div className="text-sm font-medium text-purple-700 dark:text-purple-300">
             {board.name} - Whiteboard
           </div>
-          <div 
-            className={`text-xs transition-all duration-200 ${
-              isZooming 
-                ? 'text-primary font-medium scale-110' 
-                : 'text-muted-foreground'
-            }`}
-            title="Use mouse wheel to zoom, or Ctrl+Plus/Minus/0"
-          >
-            Zoom: {Math.round(stageScale * 100)}%
+          <div className="flex items-center gap-4">
+            {/* Style Options for Selected Elements */}
+            {(() => {
+              // Get supported elements (rectangles, circles, and text)
+              const supportedElements = selectedElementIds
+                .map(id => elements.find(el => el.id === id))
+                .filter((el): el is NonNullable<typeof el> => 
+                  el !== undefined && (el.type === 'rectangle' || el.type === 'circle' || el.type === 'text')
+                )
+              
+              // Get text elements specifically
+              const textElements = selectedElementIds
+                .map(id => elements.find(el => el.id === id))
+                .filter((el): el is NonNullable<typeof el> => 
+                  el !== undefined && el.type === 'text'
+                )
+              
+              if (supportedElements.length === 0) return null
+
+              // Check if all elements have the same property value
+              const getCommonValue = <K extends keyof ElementProperties>(key: K): ElementProperties[K] | undefined => {
+                const values = supportedElements.map(el => {
+                  const props = el.properties as ElementProperties
+                  return props?.[key]
+                })
+                const firstValue = values[0]
+                return values.every(val => val === firstValue) ? firstValue : undefined
+              }
+
+              return (
+                <div className="flex items-center gap-4 px-3 py-1 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
+                  {/* Text Formatting Controls - only show for text elements */}
+                  {textElements.length > 0 && (
+                    <>
+                      {/* Font Size Controls */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-purple-700 dark:text-purple-300 font-medium">Size</span>
+                        <div className="flex gap-1">
+                          {[12, 16, 20, 24, 32].map((fontSize) => (
+                            <button
+                              key={fontSize}
+                              onClick={() => {
+                                textElements.forEach(element => {
+                                  updateElementProperties(element.id, { fontSize })
+                                })
+                              }}
+                              className={`px-2 py-1 text-xs rounded transition-colors ${
+                                (getCommonValue('fontSize') || 16) === fontSize
+                                  ? 'bg-purple-500 text-white'
+                                  : 'bg-white dark:bg-gray-800 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-800/50'
+                              }`}
+                              title={`${fontSize}px`}
+                            >
+                              {fontSize}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {/* Font Weight Controls */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-purple-700 dark:text-purple-300 font-medium">Weight</span>
+                        <div className="flex gap-1">
+                          {[
+                            { value: 'normal', label: 'Normal' },
+                            { value: 'bold', label: 'Bold' }
+                          ].map(({ value, label }) => (
+                            <button
+                              key={value}
+                              onClick={() => {
+                                textElements.forEach(element => {
+                                  updateElementProperties(element.id, { fontWeight: value })
+                                })
+                              }}
+                              className={`px-2 py-1 text-xs rounded transition-colors ${
+                                (getCommonValue('fontWeight') || 'normal') === value
+                                  ? 'bg-purple-500 text-white'
+                                  : 'bg-white dark:bg-gray-800 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-800/50'
+                              }`}
+                              title={label}
+                            >
+                              {value === 'bold' ? <strong>B</strong> : 'N'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  
+                  {/* Opacity and Stroke Style - only show for shapes */}
+                  {supportedElements.filter(el => el.type !== 'text').length > 0 && (
+                    <>
+                      {/* Quick Opacity Presets */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-purple-700 dark:text-purple-300 font-medium">Opacity</span>
+                        <div className="flex gap-1">
+                          {[0.25, 0.5, 0.75, 1].map((opacity) => (
+                            <button
+                              key={opacity}
+                              onClick={() => {
+                                supportedElements.forEach(element => {
+                                  updateElementProperties(element.id, { opacity })
+                                })
+                              }}
+                              className={`px-2 py-1 text-xs rounded transition-colors ${
+                                Math.abs((getCommonValue('opacity') || 1) - opacity) < 0.05
+                                  ? 'bg-purple-500 text-white'
+                                  : 'bg-white dark:bg-gray-800 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-800/50'
+                              }`}
+                              title={`${Math.round(opacity * 100)}%`}
+                            >
+                              {Math.round(opacity * 100)}%
+                            </button>
+                          ))}
+                        </div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={5}
+                          value={(getCommonValue('opacity') || 1) * 100}
+                          onChange={(e) => {
+                            const opacity = Number(e.target.value) / 100
+                            supportedElements.forEach(element => {
+                              updateElementProperties(element.id, { opacity })
+                            })
+                          }}
+                          className="w-16 h-1 bg-purple-200 dark:bg-purple-700 rounded appearance-none cursor-pointer ml-2"
+                        />
+                      </div>
+                      
+                      {/* Quick Stroke Style Presets */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-purple-700 dark:text-purple-300 font-medium">Style</span>
+                        <div className="flex gap-1">
+                          {[
+                            { value: 'solid', label: 'Solid', symbol: '━' },
+                            { value: 'dashed', label: 'Dash', symbol: '┅' },
+                            { value: 'dotted', label: 'Dot', symbol: '⋯' }
+                          ].map(({ value, label, symbol }) => (
+                            <button
+                              key={value}
+                              onClick={() => {
+                                supportedElements.forEach(element => {
+                                  updateElementProperties(element.id, { strokeStyle: value as 'solid' | 'dashed' | 'dotted' })
+                                })
+                              }}
+                              className={`px-2 py-1 text-xs rounded transition-colors flex items-center gap-1 ${
+                                (getCommonValue('strokeStyle') || 'solid') === value
+                                  ? 'bg-purple-500 text-white'
+                                  : 'bg-white dark:bg-gray-800 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-800/50'
+                              }`}
+                              title={label}
+                            >
+                              <span className="text-sm">{symbol}</span>
+                              <span>{label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })()}
+            
+            <div 
+              className={`text-xs px-2 py-1 rounded border font-medium ${
+                isZooming 
+                  ? 'bg-purple-500 text-white border-purple-400' 
+                  : 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-700'
+              }`}
+              title="Use mouse wheel to zoom, or Ctrl+Plus/Minus/0"
+            >
+              Zoom: {Math.round(stageScale * 100)}%
+            </div>
+            <ThemeToggle />
           </div>
         </div>
 
@@ -1576,6 +1815,26 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
         type="textarea"
       />
 
+      {/* Markdown Edit Modal */}
+      <MarkdownEditModal
+        isOpen={!!editingMarkdownElement}
+        onClose={() => setEditingMarkdownElement(null)}
+        onSubmit={(newText) => {
+          if (editingMarkdownElement) {
+            const element = elements.find(el => el.id === editingMarkdownElement.id)
+            if (element) {
+              updateElementInDB(element.id, {
+                properties: { ...(element.properties as Record<string, unknown>), text: newText }
+              })
+            }
+          }
+          setEditingMarkdownElement(null)
+        }}
+        title="Edit Markdown Text"
+        defaultValue={editingMarkdownElement?.text || ''}
+        submitText="Update"
+      />
+
       {/* Coming Soon Modal for Circle Resizing */}
       {showComingSoonModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -1600,6 +1859,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
           </div>
         </div>
       )}
+
     </div>
   )
 }

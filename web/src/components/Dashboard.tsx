@@ -1,12 +1,13 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Search, Calendar, User, FolderOpen } from 'lucide-react'
+import { Plus, Search, Calendar, User, FolderOpen, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
 import { Database } from '@/types/database.types'
 import AuthForm from './AuthForm'
 import InputModal from './InputModal'
+import ThemeToggle from './ThemeToggle'
 
 type Tables = Database['public']['Tables']
 type Task = Tables['tasks']['Row']

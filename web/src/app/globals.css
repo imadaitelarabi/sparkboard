@@ -1,27 +1,46 @@
 @import "tailwindcss";
 
 :root {
-  /* Light theme colors */
-  --background: #fefefe;
-  --foreground: #1a1a2e;
-  --muted: #f8fafc;
-  --muted-foreground: #64748b;
-  --card: #ffffff;
-  --card-foreground: #1a1a2e;
+  /* Whimsical Light Theme */
+  --background: linear-gradient(135deg, #fafbff 0%, #f0f4ff 100%);
+  --background-solid: #fafbff;
+  --foreground: #2d3748;
+  --muted: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+  --muted-solid: #f7fafc;
+  --muted-foreground: #718096;
+  --card: linear-gradient(135deg, #ffffff 0%, #f8faff 100%);
+  --card-solid: #ffffff;
+  --card-foreground: #2d3748;
   --popover: #ffffff;
-  --popover-foreground: #1a1a2e;
+  --popover-foreground: #2d3748;
   --border: #e2e8f0;
-  --input: #f1f5f9;
-  --primary: #6366f1;
+  --input: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
+  --input-solid: #ffffff;
+  --primary: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  --primary-solid: #7c3aed;
   --primary-foreground: #ffffff;
-  --secondary: #f1f5f9;
+  --secondary: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+  --secondary-solid: #f1f5f9;
   --secondary-foreground: #475569;
-  --accent: #f8fafc;
-  --accent-foreground: #334155;
-  --destructive: #ef4444;
+  --accent: linear-gradient(135deg, #f0fff4 0%, #dcfce7 100%);
+  --accent-solid: #f0fff4;
+  --accent-foreground: #047857;
+  --destructive: linear-gradient(135deg, #fecaca 0%, #ef4444 100%);
+  --destructive-solid: #ef4444;
   --destructive-foreground: #ffffff;
-  --ring: #6366f1;
-  --radius: 10px;
+  --success: linear-gradient(135deg, #bbf7d0 0%, #22c55e 100%);
+  --success-solid: #22c55e;
+  --warning: linear-gradient(135deg, #fed7aa 0%, #f97316 100%);
+  --warning-solid: #f97316;
+  --ring: #8b5cf6;
+  --radius: 8px;
+  
+  /* Subtle shadows and effects */
+  --shadow-whimsical: 0 2px 8px rgba(139, 92, 246, 0.08);
+  --shadow-floating: 0 4px 16px rgba(139, 92, 246, 0.12);
+  --shadow-glow: 0 0 0 1px rgba(139, 92, 246, 0.2);
+  --gradient-dots: radial-gradient(circle at 25% 25%, rgba(139, 92, 246, 0.1) 0%, transparent 50%),
+                   radial-gradient(circle at 75% 75%, rgba(99, 102, 241, 0.1) 0%, transparent 50%);
 }
 
 @theme inline {
@@ -227,33 +246,253 @@
   --timing-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
 
+[data-theme="dark"] {
+  /* Whimsical Dark Theme */
+  --background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%);
+  --background-solid: #0f0f23;
+  --foreground: #e2e8f0;
+  --muted: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  --muted-solid: #1e293b;
+  --muted-foreground: #94a3b8;
+  --card: linear-gradient(135deg, #1a1b23 0%, #252641 100%);
+  --card-solid: #1a1b23;
+  --card-foreground: #e2e8f0;
+  --popover: #1a1b23;
+  --popover-foreground: #e2e8f0;
+  --border: #334155;
+  --input: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  --input-solid: #1e293b;
+  --primary: linear-gradient(135deg, #a855f7 0%, #8b5cf6 100%);
+  --primary-solid: #8b5cf6;
+  --primary-foreground: #ffffff;
+  --secondary: linear-gradient(135deg, #334155 0%, #475569 100%);
+  --secondary-solid: #334155;
+  --secondary-foreground: #cbd5e1;
+  --accent: linear-gradient(135deg, #064e3b 0%, #047857 100%);
+  --accent-solid: #047857;
+  --accent-foreground: #d1fae5;
+  --destructive: linear-gradient(135deg, #991b1b 0%, #dc2626 100%);
+  --destructive-solid: #dc2626;
+  --destructive-foreground: #ffffff;
+  --success: linear-gradient(135deg, #047857 0%, #059669 100%);
+  --success-solid: #059669;
+  --warning: linear-gradient(135deg, #c2410c 0%, #ea580c 100%);
+  --warning-solid: #ea580c;
+  --ring: #a855f7;
+  
+  /* Dark theme shadows and effects */
+  --shadow-whimsical: 0 10px 25px -5px rgba(168, 85, 247, 0.3), 0 8px 10px -6px rgba(139, 92, 246, 0.2);
+  --shadow-floating: 0 20px 40px -12px rgba(168, 85, 247, 0.4), 0 8px 16px -8px rgba(139, 92, 246, 0.3);
+  --shadow-glow: 0 0 30px rgba(168, 85, 247, 0.5);
+  --gradient-dots: radial-gradient(circle at 25% 25%, rgba(168, 85, 247, 0.2) 0%, transparent 50%),
+                   radial-gradient(circle at 75% 75%, rgba(139, 92, 246, 0.15) 0%, transparent 50%);
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
-    /* Dark theme colors */
-    --background: #0a0b14;
+    /* Apply dark theme by default in dark mode */
+    --background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%);
+    --background-solid: #0f0f23;
     --foreground: #e2e8f0;
-    --muted: #1e293b;
+    --muted: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    --muted-solid: #1e293b;
     --muted-foreground: #94a3b8;
-    --card: #1a1b23;
+    --card: linear-gradient(135deg, #1a1b23 0%, #252641 100%);
+    --card-solid: #1a1b23;
     --card-foreground: #e2e8f0;
     --popover: #1a1b23;
     --popover-foreground: #e2e8f0;
     --border: #334155;
-    --input: #1e293b;
-    --primary: #818cf8;
-    --primary-foreground: #1e1b4b;
-    --secondary: #1e293b;
+    --input: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    --input-solid: #1e293b;
+    --primary: linear-gradient(135deg, #a855f7 0%, #8b5cf6 100%);
+    --primary-solid: #8b5cf6;
+    --primary-foreground: #ffffff;
+    --secondary: linear-gradient(135deg, #334155 0%, #475569 100%);
+    --secondary-solid: #334155;
     --secondary-foreground: #cbd5e1;
-    --accent: #334155;
-    --accent-foreground: #e2e8f0;
-    --destructive: #f87171;
-    --destructive-foreground: #7f1d1d;
-    --ring: #818cf8;
+    --accent: linear-gradient(135deg, #064e3b 0%, #047857 100%);
+    --accent-solid: #047857;
+    --accent-foreground: #d1fae5;
+    --destructive: linear-gradient(135deg, #991b1b 0%, #dc2626 100%);
+    --destructive-solid: #dc2626;
+    --destructive-foreground: #ffffff;
+    --success: linear-gradient(135deg, #047857 0%, #059669 100%);
+    --success-solid: #059669;
+    --warning: linear-gradient(135deg, #c2410c 0%, #ea580c 100%);
+    --warning-solid: #ea580c;
+    --ring: #a855f7;
+    
+    --shadow-whimsical: 0 10px 25px -5px rgba(168, 85, 247, 0.3), 0 8px 10px -6px rgba(139, 92, 246, 0.2);
+    --shadow-floating: 0 20px 40px -12px rgba(168, 85, 247, 0.4), 0 8px 16px -8px rgba(139, 92, 246, 0.3);
+    --shadow-glow: 0 0 30px rgba(168, 85, 247, 0.5);
+    --gradient-dots: radial-gradient(circle at 25% 25%, rgba(168, 85, 247, 0.2) 0%, transparent 50%),
+                     radial-gradient(circle at 75% 75%, rgba(139, 92, 246, 0.15) 0%, transparent 50%);
   }
 }
 
 body {
-  background: var(--background);
+  background: var(--background-solid);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  transition: background-color 300ms ease, color 300ms ease;
+}
+
+/* Whimsical utility classes */
+.whimsical-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-whimsical);
+  transition: box-shadow 200ms ease;
+}
+
+.whimsical-card:hover {
+  box-shadow: var(--shadow-floating);
+}
+
+.floating-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-floating);
+  backdrop-filter: blur(8px);
+}
+
+.gradient-button {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border: none;
+  border-radius: calc(var(--radius) - 4px);
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  box-shadow: var(--shadow-whimsical);
+  transition: all 200ms var(--timing-bounce);
+  position: relative;
+  overflow: hidden;
+}
+
+.gradient-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--gradient-dots);
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.gradient-button:hover {
+  transform: translateY(-1px) scale(1.05);
+  box-shadow: var(--shadow-floating);
+}
+
+.gradient-button:hover::before {
+  opacity: 1;
+}
+
+.gradient-button:active {
+  transform: translateY(0) scale(1.02);
+}
+
+.whimsical-input {
+  background: var(--input);
+  border: 2px solid var(--border);
+  border-radius: calc(var(--radius) - 4px);
+  padding: 0.75rem 1rem;
+  color: var(--foreground);
+  transition: all 200ms ease;
+  box-shadow: var(--shadow-whimsical);
+}
+
+.whimsical-input:focus {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: var(--shadow-glow);
+  transform: scale(1.02);
+}
+
+.floating-dots {
+  position: relative;
+}
+
+.floating-dots::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--gradient-dots);
+  border-radius: inherit;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.bounce-enter {
+  animation: bounceIn 400ms var(--timing-bounce) forwards;
+}
+
+.bounce-exit {
+  animation: bounceOut 300ms var(--timing-bounce) forwards;
+}
+
+@keyframes bounceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) translateY(20px);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05) translateY(-5px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes bounceOut {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.9) translateY(10px);
+  }
+}
+
+/* Whimsical background patterns */
+.pattern-dots {
+  position: relative;
+}
+
+.pattern-dots::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: radial-gradient(circle at 1px 1px, var(--muted-foreground) 1px, transparent 0);
+  background-size: 20px 20px;
+  opacity: 0.03;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.pattern-grid {
+  background-image: 
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 20px 20px;
+  opacity: 0.3;
+}
+
+/* Smooth theme transitions */
+* {
+  transition: background-color 300ms ease, border-color 300ms ease, color 300ms ease;
 }
