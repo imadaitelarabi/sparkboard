@@ -15,6 +15,8 @@ import {
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
 import { Database } from '@/types/database.types'
+import CreateTaskModal from './CreateTaskModal'
+import InputModal from './InputModal'
 
 type Tables = Database['public']['Tables']
 type Board = Tables['boards']['Row']
@@ -44,12 +46,14 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     toggleElementSelection,
     clearSelection,
     user,
+    isCreateTaskModalOpen,
     setIsCreateTaskModalOpen
   } = useAppStore()
 
   const [activeTool, setActiveTool] = useState<ToolType>('select')
   const [stageScale, setStageScale] = useState(1)
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 })
+  const [editingElement, setEditingElement] = useState<{ id: string; text: string } | null>(null)
 
   useEffect(() => {
     loadElements()
@@ -70,7 +74,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     }
   }
 
-  async function createElement(type: string, x: number, y: number, properties: Record<string, any> = {}) {
+  async function createElement(type: string, x: number, y: number, properties: Record<string, unknown> = {}) {
     if (!user) return
 
     const newElement = {
@@ -186,7 +190,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       y: stage.getPointerPosition()!.y / oldScale - stage.y() / oldScale
     }
 
-    const newScale = e.evt.deltaY > 0 ? oldScale * scaleBy : oldScale / scaleBy
+    const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy
     
     setStageScale(newScale)
     setStagePos({
@@ -195,12 +199,132 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     })
   }
 
+  function handleElementResize(elementId: string, newSize: { width: number; height: number }) {
+    updateElementInDB(elementId, newSize)
+  }
+
+  function renderResizeHandles(element: WhiteboardElement) {
+    const handleSize = 8 / stageScale // Scale handle size with zoom
+    const x = element.x || 0
+    const y = element.y || 0
+    const width = element.width || 0
+    const height = element.height || 0
+    
+    const handles = [
+      // Corner handles
+      { x: x - handleSize/2, y: y - handleSize/2, cursor: 'nw-resize', type: 'nw' },
+      { x: x + width - handleSize/2, y: y - handleSize/2, cursor: 'ne-resize', type: 'ne' },
+      { x: x - handleSize/2, y: y + height - handleSize/2, cursor: 'sw-resize', type: 'sw' },
+      { x: x + width - handleSize/2, y: y + height - handleSize/2, cursor: 'se-resize', type: 'se' },
+      // Side handles
+      { x: x + width/2 - handleSize/2, y: y - handleSize/2, cursor: 'n-resize', type: 'n' },
+      { x: x + width/2 - handleSize/2, y: y + height - handleSize/2, cursor: 's-resize', type: 's' },
+      { x: x - handleSize/2, y: y + height/2 - handleSize/2, cursor: 'w-resize', type: 'w' },
+      { x: x + width - handleSize/2, y: y + height/2 - handleSize/2, cursor: 'e-resize', type: 'e' }
+    ]
+
+    return handles.map(handle => (
+      <Rect
+        key={`handle-${element.id}-${handle.type}`}
+        x={handle.x}
+        y={handle.y}
+        width={handleSize}
+        height={handleSize}
+        fill="#ffffff"
+        stroke="#2563eb"
+        strokeWidth={1.5 / stageScale}
+        draggable={true}
+        onDragMove={() => {
+          const stage = stageRef.current
+          if (!stage) return
+          
+          const pointer = stage.getPointerPosition()
+          if (!pointer) return
+          
+          const newWidth = element.width || 0
+          const newHeight = element.height || 0
+          
+          // Calculate new dimensions based on handle type
+          let updatedSize = { width: newWidth, height: newHeight }
+          
+          switch (handle.type) {
+            case 'se': // Bottom-right corner
+              updatedSize = {
+                width: Math.max(20, pointer.x - x),
+                height: Math.max(20, pointer.y - y)
+              }
+              break
+            case 'nw': // Top-left corner
+              updatedSize = {
+                width: Math.max(20, (x + newWidth) - pointer.x),
+                height: Math.max(20, (y + newHeight) - pointer.y)
+              }
+              // Also need to update position
+              updateElementInDB(element.id, { 
+                x: pointer.x, 
+                y: pointer.y,
+                ...updatedSize 
+              })
+              return
+            case 'ne': // Top-right corner
+              updatedSize = {
+                width: Math.max(20, pointer.x - x),
+                height: Math.max(20, (y + newHeight) - pointer.y)
+              }
+              updateElementInDB(element.id, { 
+                y: pointer.y,
+                ...updatedSize 
+              })
+              return
+            case 'sw': // Bottom-left corner
+              updatedSize = {
+                width: Math.max(20, (x + newWidth) - pointer.x),
+                height: Math.max(20, pointer.y - y)
+              }
+              updateElementInDB(element.id, { 
+                x: pointer.x,
+                ...updatedSize 
+              })
+              return
+            case 'e': // Right side
+              updatedSize = { width: Math.max(20, pointer.x - x), height: newHeight }
+              break
+            case 'w': // Left side
+              updatedSize = { 
+                width: Math.max(20, (x + newWidth) - pointer.x), 
+                height: newHeight 
+              }
+              updateElementInDB(element.id, { 
+                x: pointer.x,
+                ...updatedSize 
+              })
+              return
+            case 's': // Bottom side
+              updatedSize = { width: newWidth, height: Math.max(20, pointer.y - y) }
+              break
+            case 'n': // Top side
+              updatedSize = { 
+                width: newWidth, 
+                height: Math.max(20, (y + newHeight) - pointer.y) 
+              }
+              updateElementInDB(element.id, { 
+                y: pointer.y,
+                ...updatedSize 
+              })
+              return
+          }
+          
+          handleElementResize(element.id, updatedSize)
+        }}
+      />
+    ))
+  }
+
   function renderElement(element: WhiteboardElement) {
     const isSelected = selectedElementIds.includes(element.id)
-    const props = element.properties as Record<string, any>
+    const props = element.properties as Record<string, unknown>
 
     const baseProps = {
-      key: element.id,
       x: element.x || 0,
       y: element.y || 0,
       width: element.width || 0,
@@ -210,8 +334,8 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       onClick: (e: Konva.KonvaEventObject<MouseEvent>) => handleElementClick(element.id, e),
       onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => handleElementDrag(element.id, e.target.attrs),
       onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => handleElementDragEnd(element.id, e.target.attrs),
-      stroke: isSelected ? '#ef4444' : props.stroke,
-      strokeWidth: isSelected ? 2 : props.strokeWidth || 1
+      stroke: isSelected ? '#ef4444' : (props.stroke as string),
+      strokeWidth: isSelected ? 2 : (props.strokeWidth as number) || 1
     }
 
     switch (element.type) {
@@ -219,45 +343,44 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       case 'sticky_note':
         return (
           <Rect
+            key={element.id}
             {...baseProps}
-            fill={props.fill}
+            fill={props.fill as string}
             cornerRadius={element.type === 'sticky_note' ? 6 : 0}
           />
         )
       case 'circle':
         return (
           <Circle
+            key={element.id}
             {...baseProps}
             radius={(element.width || 0) / 2}
-            fill={props.fill}
+            fill={props.fill as string}
           />
         )
       case 'text':
       case 'sticky_note':
         return (
           <Text
+            key={element.id}
             {...baseProps}
-            text={props.text || 'Text'}
-            fontSize={props.fontSize || 14}
-            fill={props.textColor || '#000000'}
+            text={(props.text as string) || 'Text'}
+            fontSize={(props.fontSize as number) || 14}
+            fill={(props.textColor as string) || '#000000'}
             align="center"
             verticalAlign="middle"
             onDblClick={() => {
-              const newText = prompt('Edit text:', props.text)
-              if (newText !== null) {
-                updateElementInDB(element.id, {
-                  properties: { ...props, text: newText }
-                })
-              }
+              setEditingElement({ id: element.id, text: (props.text as string) || '' })
             }}
           />
         )
       case 'arrow':
         return (
           <Arrow
+            key={element.id}
             {...baseProps}
             points={[0, 0, element.width || 0, element.height || 0]}
-            fill={props.fill}
+            fill={props.fill as string}
             pointerLength={8}
             pointerWidth={8}
           />
@@ -334,31 +457,118 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
           draggable={activeTool === 'select'}
         >
           <Layer>
-            {/* Grid */}
-            {Array.from({ length: 50 }, (_, i) => (
-              <React.Fragment key={i}>
-                <Rect
-                  x={i * 50}
-                  y={0}
-                  width={1}
-                  height={2500}
-                  fill="#f1f5f9"
-                />
-                <Rect
-                  x={0}
-                  y={i * 50}
-                  width={2500}
-                  height={1}
-                  fill="#f1f5f9"
-                />
-              </React.Fragment>
-            ))}
+            {/* Dot Grid Pattern like Whimsical */}
+            {(() => {
+              // Adaptive dot spacing based on zoom level
+              let baseDotSpacing = 20
+              let currentDotSpacing = baseDotSpacing
+              let dotLevel = 0
+              
+              // Scale dot spacing based on zoom - show larger spacing when zoomed out
+              if (stageScale < 0.25) {
+                currentDotSpacing = baseDotSpacing * 8 // 160px spacing
+                dotLevel = 3
+              } else if (stageScale < 0.5) {
+                currentDotSpacing = baseDotSpacing * 4 // 80px spacing  
+                dotLevel = 2
+              } else if (stageScale < 1) {
+                currentDotSpacing = baseDotSpacing * 2 // 40px spacing
+                dotLevel = 1
+              } else {
+                currentDotSpacing = baseDotSpacing // 20px spacing
+                dotLevel = 0
+              }
+              
+              const majorDotSpacing = currentDotSpacing * 5 // Every 5th dot is larger
+              const dots = []
+              
+              // Calculate visible area based on zoom and position
+              const visibleArea = {
+                x: -stagePos.x / stageScale,
+                y: -stagePos.y / stageScale,
+                width: window.innerWidth / stageScale,
+                height: window.innerHeight / stageScale
+              }
+              
+              // Only render dots in visible area for performance
+              const startX = Math.floor(visibleArea.x / currentDotSpacing) * currentDotSpacing
+              const endX = Math.ceil((visibleArea.x + visibleArea.width) / currentDotSpacing) * currentDotSpacing
+              const startY = Math.floor(visibleArea.y / currentDotSpacing) * currentDotSpacing
+              const endY = Math.ceil((visibleArea.y + visibleArea.height) / currentDotSpacing) * currentDotSpacing
+              
+              // Calculate opacity based on zoom level for smooth transitions
+              const minOpacity = 0.2
+              const maxOpacity = 0.6
+              const dotOpacity = Math.max(minOpacity, Math.min(maxOpacity, stageScale * 0.4 + 0.2))
+              
+              // Dot size scales with zoom
+              const minorDotSize = Math.max(1, Math.min(2, stageScale * 1.5))
+              const majorDotSize = Math.max(2, Math.min(4, stageScale * 2.5))
+              
+              // Create dots at grid intersections
+              for (let x = startX; x <= endX; x += currentDotSpacing) {
+                for (let y = startY; y <= endY; y += currentDotSpacing) {
+                  const isMajor = (x % majorDotSpacing === 0) && (y % majorDotSpacing === 0)
+                  const dotSize = isMajor ? majorDotSize : minorDotSize
+                  
+                  dots.push(
+                    <Circle
+                      key={`dot-${x}-${y}-${dotLevel}`}
+                      x={x}
+                      y={y}
+                      radius={dotSize}
+                      fill={isMajor ? '#94a3b8' : '#cbd5e1'}
+                      opacity={isMajor ? dotOpacity : dotOpacity * 0.7}
+                    />
+                  )
+                }
+              }
+              
+              return dots
+            })()}
             
             {/* Elements */}
             {elements.map(renderElement)}
+            
+            {/* Resize handles for selected elements */}
+            {selectedElementIds.map(elementId => {
+              const element = elements.find(el => el.id === elementId)
+              return element ? renderResizeHandles(element) : null
+            })}
           </Layer>
         </Stage>
       </div>
+
+      {/* Create Task Modal */}
+      <CreateTaskModal
+        isOpen={isCreateTaskModalOpen}
+        onClose={() => setIsCreateTaskModalOpen(false)}
+        onTaskCreated={() => {
+          // Optional: Show success message or refresh data
+        }}
+      />
+
+      {/* Text Edit Modal */}
+      <InputModal
+        isOpen={!!editingElement}
+        onClose={() => setEditingElement(null)}
+        onSubmit={(newText) => {
+          if (editingElement) {
+            const element = elements.find(el => el.id === editingElement.id)
+            if (element) {
+              updateElementInDB(element.id, {
+                properties: { ...(element.properties as Record<string, unknown>), text: newText }
+              })
+            }
+          }
+          setEditingElement(null)
+        }}
+        title="Edit Text"
+        placeholder="Enter text..."
+        defaultValue={editingElement?.text || ''}
+        submitText="Update"
+        type="textarea"
+      />
     </div>
   )
 }

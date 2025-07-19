@@ -17,10 +17,10 @@ export type Database = {
     Functions: {
       graphql: {
         Args: {
-          operationName?: string
-          extensions?: Json
           variables?: Json
+          operationName?: string
           query?: string
+          extensions?: Json
         }
         Returns: Json
       }
@@ -309,11 +309,25 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "tasks_assignee_id_fkey"
+            columns: ["assignee_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
             foreignKeyName: "tasks_category_id_fkey"
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "task_categories"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["user_id"]
           },
           {
             foreignKeyName: "tasks_project_id_fkey"
@@ -359,7 +373,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_project_member: {
+        Args: { project_uuid: string; user_uuid: string }
+        Returns: boolean
+      }
+      is_project_owner: {
+        Args: { user_uuid: string; project_uuid: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

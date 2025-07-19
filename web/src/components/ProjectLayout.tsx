@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
 import { Database } from '@/types/database.types'
 import dynamic from 'next/dynamic'
+import InputModal from './InputModal'
 
 const WhiteboardView = dynamic(() => import('./WhiteboardView'), { 
   ssr: false,
@@ -38,10 +39,11 @@ export default function ProjectLayout({ projectId }: ProjectLayoutProps) {
   
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'whiteboard' | 'tasks'>('whiteboard')
+  const [showCreateWhiteboardModal, setShowCreateWhiteboardModal] = useState(false)
 
   useEffect(() => {
     loadProject()
-  }, [loadProject])
+  }, [])
 
   const loadProject = useCallback(async () => {
     try {
@@ -115,10 +117,9 @@ export default function ProjectLayout({ projectId }: ProjectLayoutProps) {
     }
   }
 
-  async function createWhiteboard() {
-    const name = prompt('Enter whiteboard name:')
-    if (!name) return
-    await createBoard(name, 'whiteboard')
+  async function createWhiteboard(name: string) {
+    if (!name.trim()) return
+    await createBoard(name.trim(), 'whiteboard')
   }
 
   const whiteboards = boards.filter(b => b.type === 'whiteboard')
@@ -197,7 +198,7 @@ export default function ProjectLayout({ projectId }: ProjectLayoutProps) {
               </button>
             ))}
             <button
-              onClick={createWhiteboard}
+              onClick={() => setShowCreateWhiteboardModal(true)}
               className="p-1 hover:bg-accent rounded-md transition-colors"
               title="Add Whiteboard"
             >
@@ -233,6 +234,19 @@ export default function ProjectLayout({ projectId }: ProjectLayoutProps) {
           <TaskBoardView board={taskBoard} project={currentProject} />
         )}
       </div>
+
+      {/* Create Whiteboard Modal */}
+      <InputModal
+        isOpen={showCreateWhiteboardModal}
+        onClose={() => setShowCreateWhiteboardModal(false)}
+        onSubmit={(name) => {
+          createWhiteboard(name)
+          setShowCreateWhiteboardModal(false)
+        }}
+        title="Create New Whiteboard"
+        placeholder="Enter whiteboard name..."
+        submitText="Create Whiteboard"
+      />
     </div>
   )
 }

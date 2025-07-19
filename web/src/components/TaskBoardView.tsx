@@ -5,6 +5,7 @@ import { Plus, MoreHorizontal, Calendar, User, ExternalLink } from 'lucide-react
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
 import { Database } from '@/types/database.types'
+import InputModal from './InputModal'
 
 type Tables = Database['public']['Tables']
 type Board = Tables['boards']['Row']
@@ -35,6 +36,8 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
 
   const [loading, setLoading] = useState(true)
   const [draggedTask, setDraggedTask] = useState<string | null>(null)
+  const [showCreateTaskModal, setShowCreateTaskModal] = useState<string | null>(null)
+  const [showCreateCategoryModal, setShowCreateCategoryModal] = useState(false)
 
   useEffect(() => {
     loadTasksAndCategories()
@@ -58,7 +61,7 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
         .select(`
           *,
           category:task_categories(id, name, color),
-          assignee:user_profiles(full_name),
+          assignee:user_profiles!tasks_assignee_id_fkey(full_name),
           task_elements(element_id)
         `)
         .eq('project_id', project.id)
@@ -74,11 +77,8 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
     }
   }
 
-  async function createTask(categoryId: string) {
-    if (!user) return
-
-    const title = prompt('Enter task title:')
-    if (!title) return
+  async function createTask(categoryId: string, title: string) {
+    if (!user || !title.trim()) return
 
     try {
       const { data, error } = await supabase
@@ -86,14 +86,14 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
         .insert({
           project_id: project.id,
           category_id: categoryId,
-          title,
-          created_by: user.id,
+          title: title.trim(),
+          created_by: (user as { id: string }).id,
           position: tasks.filter(t => t.category_id === categoryId).length
         })
         .select(`
           *,
           category:task_categories(id, name, color),
-          assignee:user_profiles(full_name),
+          assignee:user_profiles!tasks_assignee_id_fkey(full_name),
           task_elements(element_id)
         `)
         .single()
@@ -125,16 +125,15 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
     }
   }
 
-  async function createCategory() {
-    const name = prompt('Enter category name:')
-    if (!name) return
+  async function createCategory(name: string) {
+    if (!name.trim()) return
 
     try {
       const { data, error } = await supabase
         .from('task_categories')
         .insert({
           project_id: project.id,
-          name,
+          name: name.trim(),
           position: taskCategories.length
         })
         .select()
@@ -191,7 +190,7 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
                 <div className="flex items-center gap-2">
                   <div
                     className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: category.color }}
+                    style={{ backgroundColor: category.color || '#6366f1' }}
                   />
                   <h3 className="font-medium text-foreground text-sm">{category.name}</h3>
                   <span className="text-xs text-muted-foreground">
@@ -199,7 +198,7 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
                   </span>
                 </div>
                 <button
-                  onClick={() => createTask(category.id)}
+                  onClick={() => setShowCreateTaskModal(category.id)}
                   className="p-1 hover:bg-accent rounded transition-colors"
                   title="Add Task"
                 >
@@ -279,7 +278,7 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
                 <div className="text-center py-6 text-muted-foreground">
                   <div className="text-xs">No tasks yet</div>
                   <button
-                    onClick={() => createTask(category.id)}
+                    onClick={() => setShowCreateTaskModal(category.id)}
                     className="text-xs text-primary hover:text-primary/80 mt-1 transition-colors"
                   >
                     Add the first task
@@ -293,7 +292,7 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
         {/* Add Category */}
         <div className="flex-shrink-0 w-72">
           <button
-            onClick={createCategory}
+            onClick={() => setShowCreateCategoryModal(true)}
             className="w-full h-28 border-2 border-dashed border-border rounded-lg hover:border-muted-foreground transition-colors flex items-center justify-center text-muted-foreground hover:text-foreground"
           >
             <div className="text-center">
@@ -303,6 +302,34 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
           </button>
         </div>
       </div>
+
+      {/* Create Task Modal */}
+      <InputModal
+        isOpen={!!showCreateTaskModal}
+        onClose={() => setShowCreateTaskModal(null)}
+        onSubmit={(title) => {
+          if (showCreateTaskModal) {
+            createTask(showCreateTaskModal, title)
+          }
+          setShowCreateTaskModal(null)
+        }}
+        title="Create New Task"
+        placeholder="Enter task title..."
+        submitText="Create Task"
+      />
+
+      {/* Create Category Modal */}
+      <InputModal
+        isOpen={showCreateCategoryModal}
+        onClose={() => setShowCreateCategoryModal(false)}
+        onSubmit={(name) => {
+          createCategory(name)
+          setShowCreateCategoryModal(false)
+        }}
+        title="Create New Category"
+        placeholder="Enter category name..."
+        submitText="Create Category"
+      />
     </div>
   )
 }

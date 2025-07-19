@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
 import { Database } from '@/types/database.types'
 import AuthForm from './AuthForm'
+import InputModal from './InputModal'
 
 type Tables = Database['public']['Tables']
 type Task = Tables['tasks']['Row']
@@ -24,6 +25,7 @@ export default function Dashboard() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterProject, setFilterProject] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [showCreateProjectModal, setShowCreateProjectModal] = useState(false)
 
   const loadData = useCallback(async () => {
     try {
@@ -52,7 +54,7 @@ export default function Dashboard() {
           *,
           project:projects(name),
           category:task_categories(name, color),
-          assignee:user_profiles(full_name)
+          assignee:user_profiles!tasks_assignee_id_fkey(full_name)
         `)
         .order('created_at', { ascending: false })
 
@@ -84,17 +86,14 @@ export default function Dashboard() {
     return () => subscription.unsubscribe()
   }, [loadData, supabase.auth, setUser, setProjects, setTasks])
 
-  async function createProject() {
-    if (!user) return
-    
-    const projectName = prompt('Enter project name:')
-    if (!projectName) return
+  async function createProject(projectName: string) {
+    if (!user || !projectName.trim()) return
 
     try {
       const { data, error } = await supabase
         .from('projects')
         .insert({
-          name: projectName,
+          name: projectName.trim(),
           owner_id: (user as { id: string }).id
         })
         .select()
@@ -138,7 +137,7 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={createProject}
+              onClick={() => setShowCreateProjectModal(true)}
               className="bg-primary text-primary-foreground px-3 py-2 rounded-lg hover:bg-primary/90 flex items-center gap-2 text-sm font-medium transition-colors"
             >
               <Plus className="h-4 w-4" />
@@ -275,6 +274,16 @@ export default function Dashboard() {
           )}
         </main>
       </div>
+
+      {/* Create Project Modal */}
+      <InputModal
+        isOpen={showCreateProjectModal}
+        onClose={() => setShowCreateProjectModal(false)}
+        onSubmit={createProject}
+        title="Create New Project"
+        placeholder="Enter project name..."
+        submitText="Create Project"
+      />
     </div>
   )
 }
