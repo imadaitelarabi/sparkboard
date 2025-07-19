@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Plus, MoreHorizontal, Calendar, User, ExternalLink } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
+import { useRouter } from 'next/navigation'
 import { Database } from '@/types/database.types'
 import InputModal from './InputModal'
 
@@ -25,13 +26,15 @@ interface TaskWithDetails extends Task {
 }
 
 export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
+  const router = useRouter()
   const supabase = createClient()
   const { 
     tasks, 
     setTasks, 
     taskCategories, 
     setTaskCategories, 
-    user 
+    user,
+    setNavigationContext
   } = useAppStore()
 
   const [loading, setLoading] = useState(true)
@@ -166,6 +169,56 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
     return tasks.filter(task => task.category_id === categoryId)
   }
 
+  async function handleTaskClick(task: TaskWithDetails) {
+    // Only navigate if task has linked elements
+    if (task.task_elements && task.task_elements.length > 0) {
+      const elementIds = task.task_elements.map(te => te.element_id)
+      
+      try {
+        // Query to find which board contains these elements
+        const { data: elementsData, error: elementsError } = await supabase
+          .from('elements')
+          .select('board_id')
+          .in('id', elementIds)
+          .limit(1)
+
+        if (elementsError) throw elementsError
+
+        if (elementsData && elementsData.length > 0) {
+          const boardId = elementsData[0].board_id
+          
+          // Find the whiteboard that contains these elements
+          const { data: boardData, error: boardError } = await supabase
+            .from('boards')
+            .select('*')
+            .eq('id', boardId)
+            .eq('type', 'whiteboard')
+            .single()
+
+          if (boardError) throw boardError
+
+          if (boardData) {
+            // Set navigation context for whiteboard to pick up
+            setNavigationContext({
+              elementIds,
+              fromTask: true
+            })
+            
+            // Navigate to the specific whiteboard with element selection
+            const searchParams = new URLSearchParams()
+            searchParams.set('tab', 'whiteboard')
+            searchParams.set('elements', elementIds.join(','))
+            searchParams.set('board', boardId)
+            
+            router.push(`/project/${project.id}?${searchParams.toString()}`)
+          }
+        }
+      } catch (error) {
+        console.error('Error finding board for elements:', error)
+      }
+    }
+  }
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -209,12 +262,25 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
 
             {/* Tasks */}
             <div className="p-3 space-y-2 min-h-28">
-              {getTasksByCategory(category.id).map((task: TaskWithDetails) => (
+              {getTasksByCategory(category.id).map((task: TaskWithDetails) => {
+                const hasLinkedElements = task.task_elements && task.task_elements.length > 0
+                
+                return (
                 <div
                   key={task.id}
                   draggable
                   onDragStart={() => handleDragStart(task.id)}
-                  className="bg-background border border-border rounded-md p-2 cursor-grab active:cursor-grabbing hover:shadow-sm transition-all duration-normal"
+                  onClick={(e) => {
+                    // Only navigate if clicking the task card itself, not the action button
+                    if (!(e.target as HTMLElement).closest('button')) {
+                      handleTaskClick(task)
+                    }
+                  }}
+                  className={`bg-background border border-border rounded-md p-2 transition-all duration-normal ${
+                    hasLinkedElements 
+                      ? 'cursor-pointer hover:shadow-md hover:border-primary/50' 
+                      : 'cursor-grab active:cursor-grabbing hover:shadow-sm'
+                  }`}
                 >
                   <div className="flex items-start justify-between mb-1">
                     <h4 className="font-medium text-foreground text-xs leading-4">
@@ -250,7 +316,7 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
 
                     {/* Linked elements indicator */}
                     {task.task_elements && task.task_elements.length > 0 && (
-                      <div className="flex items-center gap-1 text-primary">
+                      <div className="flex items-center gap-1 text-primary" title="Click to view linked elements on whiteboard">
                         <ExternalLink className="h-2 w-2" />
                         <span>{task.task_elements.length}</span>
                       </div>
@@ -272,7 +338,8 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
                     </div>
                   )}
                 </div>
-              ))}
+                )
+              })}
 
               {getTasksByCategory(category.id).length === 0 && (
                 <div className="text-center py-6 text-muted-foreground">

@@ -53,6 +53,13 @@ interface AppState {
   toggleElementSelection: (id: string) => void
   clearSelection: () => void
 
+  // Navigation context for task-to-whiteboard flow
+  navigationContext: {
+    elementIds: string[]
+    fromTask: boolean
+  } | null
+  setNavigationContext: (context: { elementIds: string[]; fromTask: boolean } | null) => void
+
   // UI state
   isCreateTaskModalOpen: boolean
   setIsCreateTaskModalOpen: (open: boolean) => void
@@ -125,6 +132,10 @@ export const useAppStore = create<AppState>((set) => ({
     }
   }),
   clearSelection: () => set({ selectedElementIds: [] }),
+
+  // Navigation context
+  navigationContext: null,
+  setNavigationContext: (context) => set({ navigationContext: context }),
 
   // UI state
   isCreateTaskModalOpen: false,

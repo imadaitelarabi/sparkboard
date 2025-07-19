@@ -15,6 +15,12 @@ export type CornerRadiusPreset = 'sharp' | 'rounded' | 'very_rounded' | 'pill'
 
 // Extended element properties that will be stored in the properties JSON field
 export interface ElementProperties {
+  // Geometric properties
+  x?: number
+  y?: number
+  width?: number
+  height?: number
+  
   // Existing properties
   fill?: string
   stroke?: string

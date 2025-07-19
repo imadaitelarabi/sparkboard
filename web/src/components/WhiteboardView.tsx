@@ -281,7 +281,9 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     clearSelection,
     user,
     isCreateTaskModalOpen,
-    setIsCreateTaskModalOpen
+    setIsCreateTaskModalOpen,
+    navigationContext,
+    setNavigationContext
   } = useAppStore()
 
   const [activeTool, setActiveTool] = useState<ToolType>('select')
@@ -304,6 +306,23 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   
   // Zoom state for better control
   const [isZooming, setIsZooming] = useState(false)
+  
+  // Selection rectangle state for drag selection
+  const [selectionRect, setSelectionRect] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    startX: number;
+    startY: number;
+    shiftHeld: boolean;
+  }>({ visible: false, x: 0, y: 0, width: 0, height: 0, startX: 0, startY: 0, shiftHeld: false })
+  
+  // Panning state for two-finger/middle-mouse panning
+  const [isPanning, setIsPanning] = useState(false)
+  const [panStart, setPanStart] = useState<{ x: number; y: number; stageX: number; stageY: number } | null>(null)
+  const [spacePressed, setSpacePressed] = useState(false)
 
   // Auto-select appropriate color when switching tools
   const handleToolChange = (toolType: ToolType) => {
@@ -567,6 +586,29 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   useEffect(() => {
     loadElements()
   }, [board.id])
+
+  // Handle navigation context for auto-selection and centering
+  useEffect(() => {
+    if (navigationContext?.fromTask && navigationContext.elementIds.length > 0) {
+      // Filter to only include elements that exist on this board
+      const validElementIds = navigationContext.elementIds.filter(id => 
+        elements.some(el => el.id === id)
+      )
+      
+      if (validElementIds.length > 0) {
+        // Select the elements
+        setSelectedElementIds(validElementIds)
+        
+        // Center view on selected elements
+        setTimeout(() => {
+          centerViewOnElements(validElementIds)
+        }, 100)
+      }
+      
+      // Clear navigation context after handling
+      setNavigationContext(null)
+    }
+  }, [navigationContext, elements, setSelectedElementIds, setNavigationContext])
   
   // Close context menu when clicking outside
   useEffect(() => {
@@ -583,9 +625,17 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [contextMenu])
 
-  // Keyboard shortcuts for zoom
+  // Keyboard shortcuts for zoom and space bar panning
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
+      // Space bar for panning mode
+      if (event.code === 'Space' && !spacePressed) {
+        event.preventDefault()
+        setSpacePressed(true)
+        document.body.style.cursor = 'grab'
+        return
+      }
+      
       if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
         if (event.key === '=' || event.key === '+') {
           event.preventDefault()
@@ -608,9 +658,26 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       }
     }
     
+    function handleKeyUp(event: KeyboardEvent) {
+      // Space bar release
+      if (event.code === 'Space') {
+        setSpacePressed(false)
+        document.body.style.cursor = ''
+        // Stop panning if currently panning with space
+        if (isPanning) {
+          setIsPanning(false)
+          setPanStart(null)
+        }
+      }
+    }
+    
     document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [stageScale])
+    document.addEventListener('keyup', handleKeyUp)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('keyup', handleKeyUp)
+    }
+  }, [stageScale, spacePressed, isPanning])
 
   async function loadElements() {
     try {
@@ -625,6 +692,63 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     } catch (error) {
       console.error('Error loading elements:', error)
     }
+  }
+
+  function centerViewOnElements(elementIds: string[]) {
+    if (!stageRef.current || elementIds.length === 0) return
+
+    const stage = stageRef.current
+    const stageWidth = stage.width()
+    const stageHeight = stage.height()
+
+    // Calculate the bounding box of all selected elements
+    const selectedElements = elements.filter(el => elementIds.includes(el.id))
+    if (selectedElements.length === 0) return
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+
+    selectedElements.forEach(element => {
+      const props = element.properties as ElementProperties || {}
+      const x = props.x || 0
+      const y = props.y || 0
+      const width = props.width || 100
+      const height = props.height || 100
+
+      minX = Math.min(minX, x)
+      minY = Math.min(minY, y)
+      maxX = Math.max(maxX, x + width)
+      maxY = Math.max(maxY, y + height)
+    })
+
+    const centerX = (minX + maxX) / 2
+    const centerY = (minY + maxY) / 2
+
+    // Calculate scale to fit elements with some padding
+    const elementsWidth = maxX - minX
+    const elementsHeight = maxY - minY
+    const padding = 100 // pixels of padding around elements
+
+    const scaleX = (stageWidth - padding * 2) / elementsWidth
+    const scaleY = (stageHeight - padding * 2) / elementsHeight
+    const newScale = Math.min(scaleX, scaleY, 1.5) // Don't zoom in too much
+
+    // Calculate new position to center the elements
+    const newX = stageWidth / 2 - centerX * newScale
+    const newY = stageHeight / 2 - centerY * newScale
+
+    // Update stage position and scale
+    setStageScale(newScale)
+    setStagePos({ x: newX, y: newY })
+
+    // Add a subtle animation effect
+    stage.to({
+      duration: 0.3,
+      x: newX,
+      y: newY,
+      scaleX: newScale,
+      scaleY: newScale,
+      easing: Konva.Easings.EaseOut
+    })
   }
 
   async function createElement(type: string, x: number, y: number, properties: Record<string, unknown> = {}) {
@@ -840,26 +964,73 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     )
   }
 
-  function handleStageClick(e: Konva.KonvaEventObject<MouseEvent>) {
+  function handleStageMouseDown(e: Konva.KonvaEventObject<MouseEvent>) {
     const stage = e.target.getStage()
     if (!stage) return
 
     const pos = stage.getPointerPosition()
     if (!pos) return
 
-    // Close context menu on stage click
+    // Close context menu
     setContextMenu(null)
 
+    // Check for panning gestures (middle mouse button, space+click, or two-finger equivalent)
+    const isMiddleClick = e.evt.button === 1
+    const isSpaceClick = e.evt.button === 0 && spacePressed // Space + left click
+    const isRightClickPan = e.evt.button === 2 && e.evt.shiftKey // Shift+Right click
+    const isShiftMetaClick = e.evt.button === 0 && e.evt.shiftKey && e.evt.metaKey // Shift+Cmd+Click for Mac
+    
+    if (isMiddleClick || isSpaceClick || isRightClickPan || isShiftMetaClick) {
+      // Start panning
+      setIsPanning(true)
+      setPanStart({
+        x: pos.x,
+        y: pos.y,
+        stageX: stagePos.x,
+        stageY: stagePos.y
+      })
+      e.evt.preventDefault()
+      document.body.style.cursor = 'grabbing'
+      return
+    }
+
     if (activeTool === 'select') {
-      // If clicking on empty space, clear selection
-      if (e.target === stage) {
-        clearSelection()
+      // If clicking on empty space with left mouse button, start selection rectangle
+      if (e.target === stage && e.evt.button === 0) {
+        // Clear existing selection if not holding shift
+        if (!e.evt.shiftKey) {
+          clearSelection()
+        }
+        
+        // Convert screen coordinates to stage coordinates for proper alignment
+        const stagePos = stage.getRelativePointerPosition()
+        if (!stagePos) return
+        
+        // Start selection rectangle with stage-relative coordinates
+        setSelectionRect({
+          visible: true,
+          x: stagePos.x,
+          y: stagePos.y,
+          width: 0,
+          height: 0,
+          startX: stagePos.x,
+          startY: stagePos.y,
+          shiftHeld: e.evt.shiftKey
+        })
       }
     } else {
-      // Create new element
-      createElement(activeTool, pos.x, pos.y)
+      // Create new element (use relative position for consistency)
+      const stagePos = stage.getRelativePointerPosition()
+      if (stagePos) {
+        createElement(activeTool, stagePos.x, stagePos.y)
+      }
       setActiveTool('select')
     }
+  }
+
+  function handleStageClick() {
+    // This will only be called for actual clicks (not drags)
+    // The selection logic is now handled in mouse down/up/move
   }
 
   function handleElementClick(elementId: string, e: Konva.KonvaEventObject<MouseEvent>) {
@@ -918,174 +1089,290 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     const stage = stageRef.current
     if (!stage) return
 
-    // Set zooming state for UI feedback
-    setIsZooming(true)
-    
-    // Clear any existing zoom timeout
-    if (window.zoomTimeout) {
-      clearTimeout(window.zoomTimeout)
-    }
-    
-    // Reset zooming state after a delay
-    window.zoomTimeout = setTimeout(() => {
-      setIsZooming(false)
-    }, 150)
-
-    // Zoom limits for better UX
-    const minScale = 0.1  // 10% minimum zoom
-    const maxScale = 5.0  // 500% maximum zoom
-    
-    // Improved scaling with better sensitivity and device detection
+    const deltaX = e.evt.deltaX
     const deltaY = e.evt.deltaY
     
-    // Different sensitivity for different scroll types
-    // Most trackpads send smaller deltaY values, mice send larger ones
-    let sensitivity = 0.01 // Increased base sensitivity for more noticeable zoom
+    // PRIORITY 1: Ctrl/Cmd + scroll = zooming
+    if (e.evt.ctrlKey || e.evt.metaKey) {
+      // Set zooming state for UI feedback
+      setIsZooming(true)
     
-    // Detect trackpad vs mouse wheel based on deltaY magnitude
-    if (Math.abs(deltaY) > 100) {
-      // Likely a mouse wheel - use higher sensitivity for more responsive feel
-      sensitivity = 0.015
-    } else {
-      // Likely a trackpad - moderate sensitivity for good control
-      sensitivity = 0.008
+      // Clear any existing zoom timeout
+      if (window.zoomTimeout) {
+        clearTimeout(window.zoomTimeout)
+      }
+      
+      // Reset zooming state after a delay
+      window.zoomTimeout = setTimeout(() => {
+        setIsZooming(false)
+      }, 150)
+
+      // Zoom limits for better UX
+      const minScale = 0.1  // 10% minimum zoom
+      const maxScale = 5.0  // 500% maximum zoom
+      
+      // Improved scaling with better sensitivity and device detection
+      // Different sensitivity for different scroll types
+      // Most trackpads send smaller deltaY values, mice send larger ones
+      let sensitivity = 0.01 // Increased base sensitivity for more noticeable zoom
+      
+      // Detect trackpad vs mouse wheel based on deltaY magnitude
+      if (Math.abs(deltaY) > 100) {
+        // Likely a mouse wheel - use higher sensitivity for more responsive feel
+        sensitivity = 0.015
+      } else {
+        // Likely a trackpad - moderate sensitivity for good control
+        sensitivity = 0.008
+      }
+      
+      // Calculate zoom factor based on scroll amount
+      let zoomFactor = 1 - (deltaY * sensitivity)
+      
+      // Wider zoom factor range for more noticeable steps
+      zoomFactor = Math.max(0.8, Math.min(1.25, zoomFactor))
+      
+      const oldScale = stage.scaleX()
+      let newScale = oldScale * zoomFactor
+      
+      // Apply zoom limits
+      newScale = Math.max(minScale, Math.min(maxScale, newScale))
+      
+      // If we're at the limits, don't zoom
+      if (newScale === oldScale) return
+      
+      // Calculate mouse position for zoom-to-mouse behavior
+      const pointer = stage.getPointerPosition()
+      if (!pointer) return
+      
+      const mousePointTo = {
+        x: pointer.x / oldScale - stage.x() / oldScale,
+        y: pointer.y / oldScale - stage.y() / oldScale
+      }
+      
+      // Update scale and position for smooth zoom-to-mouse
+      setStageScale(newScale)
+      setStagePos({
+        x: -(mousePointTo.x - pointer.x / newScale) * newScale,
+        y: -(mousePointTo.y - pointer.y / newScale) * newScale
+      })
+      return
     }
     
-    // Calculate zoom factor based on scroll amount
-    let zoomFactor = 1 - (deltaY * sensitivity)
-    
-    // Wider zoom factor range for more noticeable steps
-    zoomFactor = Math.max(0.8, Math.min(1.25, zoomFactor))
-    
-    const oldScale = stage.scaleX()
-    let newScale = oldScale * zoomFactor
-    
-    // Apply zoom limits
-    newScale = Math.max(minScale, Math.min(maxScale, newScale))
-    
-    // If we're at the limits, don't zoom
-    if (newScale === oldScale) return
-    
-    // Calculate mouse position for zoom-to-mouse behavior
-    const pointer = stage.getPointerPosition()
-    if (!pointer) return
-    
-    const mousePointTo = {
-      x: pointer.x / oldScale - stage.x() / oldScale,
-      y: pointer.y / oldScale - stage.y() / oldScale
-    }
-    
-    // Update scale and position for smooth zoom-to-mouse
-    setStageScale(newScale)
-    setStagePos({
-      x: -(mousePointTo.x - pointer.x / newScale) * newScale,
-      y: -(mousePointTo.y - pointer.y / newScale) * newScale
-    })
+    // PRIORITY 2: Regular scroll = panning in any direction
+    // This makes trackpad navigation natural - scroll to move around
+    setStagePos(prev => ({
+      x: prev.x - deltaX,
+      y: prev.y - deltaY
+    }))
   }
 
   function handleStageMouseMove() {
     const stage = stageRef.current
-    if (!stage || !resizeState.isResizing) return
+    if (!stage) return
     
     const pointer = stage.getPointerPosition()
-    if (!pointer || !resizeState.startPointer || !resizeState.originalBounds || !resizeState.elementId) return
+    if (!pointer) return
     
-    // Calculate offset from original drag start position
-    const deltaX = pointer.x - resizeState.startPointer.x
-    const deltaY = pointer.y - resizeState.startPointer.y
-    
-    const { x: origX, y: origY, width: origWidth, height: origHeight } = resizeState.originalBounds
-    
-    
-    // Calculate new dimensions and position based on handle type and delta
-    let newAttrs: Partial<WhiteboardElement> = {}
-    
-    switch (resizeState.handleType) {
-      case 'se': // Bottom-right corner
-        newAttrs = {
-          width: Math.max(20, origWidth + deltaX),
-          height: Math.max(20, origHeight + deltaY)
-        }
-        break
-      case 'nw': // Top-left corner
-        const nwNewWidth = Math.max(20, origWidth - deltaX)
-        const nwNewHeight = Math.max(20, origHeight - deltaY)
-        newAttrs = {
-          x: origX + (origWidth - nwNewWidth),
-          y: origY + (origHeight - nwNewHeight),
-          width: nwNewWidth,
-          height: nwNewHeight
-        }
-        break
-      case 'ne': // Top-right corner
-        const neNewHeight = Math.max(20, origHeight - deltaY)
-        newAttrs = {
-          y: origY + (origHeight - neNewHeight),
-          width: Math.max(20, origWidth + deltaX),
-          height: neNewHeight
-        }
-        break
-      case 'sw': // Bottom-left corner
-        const swNewWidth = Math.max(20, origWidth - deltaX)
-        newAttrs = {
-          x: origX + (origWidth - swNewWidth),
-          width: swNewWidth,
-          height: Math.max(20, origHeight + deltaY)
-        }
-        break
-      case 'e': // Right side
-        newAttrs = { width: Math.max(20, origWidth + deltaX) }
-        break
-      case 'w': // Left side
-        const wNewWidth = Math.max(20, origWidth - deltaX)
-        newAttrs = {
-          x: origX + (origWidth - wNewWidth),
-          width: wNewWidth
-        }
-        break
-      case 's': // Bottom side
-        newAttrs = { height: Math.max(20, origHeight + deltaY) }
-        break
-      case 'n': // Top side
-        const nNewHeight = Math.max(20, origHeight - deltaY)
-        newAttrs = {
-          y: origY + (origHeight - nNewHeight),
-          height: nNewHeight
-        }
-        break
+    // Handle element resizing
+    if (resizeState.isResizing) {
+      if (!resizeState.startPointer || !resizeState.originalBounds || !resizeState.elementId) return
+      
+      // Calculate offset from original drag start position
+      const deltaX = pointer.x - resizeState.startPointer.x
+      const deltaY = pointer.y - resizeState.startPointer.y
+      
+      const { x: origX, y: origY, width: origWidth, height: origHeight } = resizeState.originalBounds
+      
+      
+      // Calculate new dimensions and position based on handle type and delta
+      let newAttrs: Partial<WhiteboardElement> = {}
+      
+      switch (resizeState.handleType) {
+        case 'se': // Bottom-right corner
+          newAttrs = {
+            width: Math.max(20, origWidth + deltaX),
+            height: Math.max(20, origHeight + deltaY)
+          }
+          break
+        case 'nw': // Top-left corner
+          const nwNewWidth = Math.max(20, origWidth - deltaX)
+          const nwNewHeight = Math.max(20, origHeight - deltaY)
+          newAttrs = {
+            x: origX + (origWidth - nwNewWidth),
+            y: origY + (origHeight - nwNewHeight),
+            width: nwNewWidth,
+            height: nwNewHeight
+          }
+          break
+        case 'ne': // Top-right corner
+          const neNewHeight = Math.max(20, origHeight - deltaY)
+          newAttrs = {
+            y: origY + (origHeight - neNewHeight),
+            width: Math.max(20, origWidth + deltaX),
+            height: neNewHeight
+          }
+          break
+        case 'sw': // Bottom-left corner
+          const swNewWidth = Math.max(20, origWidth - deltaX)
+          newAttrs = {
+            x: origX + (origWidth - swNewWidth),
+            width: swNewWidth,
+            height: Math.max(20, origHeight + deltaY)
+          }
+          break
+        case 'e': // Right side
+          newAttrs = { width: Math.max(20, origWidth + deltaX) }
+          break
+        case 'w': // Left side
+          const wNewWidth = Math.max(20, origWidth - deltaX)
+          newAttrs = {
+            x: origX + (origWidth - wNewWidth),
+            width: wNewWidth
+          }
+          break
+        case 's': // Bottom side
+          newAttrs = { height: Math.max(20, origHeight + deltaY) }
+          break
+        case 'n': // Top side
+          const nNewHeight = Math.max(20, origHeight - deltaY)
+          newAttrs = {
+            y: origY + (origHeight - nNewHeight),
+            height: nNewHeight
+          }
+          break
+      }
+      
+      
+      // Update element locally for smooth interaction
+      updateElement(resizeState.elementId, newAttrs)
+      return
     }
     
+    // Handle panning
+    if (isPanning && panStart) {
+      const deltaX = pointer.x - panStart.x
+      const deltaY = pointer.y - panStart.y
+      
+      setStagePos({
+        x: panStart.stageX + deltaX,
+        y: panStart.stageY + deltaY
+      })
+      return
+    }
     
-    // Update element locally for smooth interaction
-    updateElement(resizeState.elementId, newAttrs)
+    // Handle selection rectangle dragging
+    if (selectionRect.visible) {
+      // Use stage-relative coordinates for proper alignment
+      const stagePos = stage.getRelativePointerPosition()
+      if (!stagePos) return
+      
+      const startX = selectionRect.startX
+      const startY = selectionRect.startY
+      const currentX = stagePos.x
+      const currentY = stagePos.y
+      
+      // Calculate rectangle bounds (handle dragging in any direction: up/down/left/right)
+      // Math.min ensures the top-left corner is always the origin regardless of drag direction
+      const x = Math.min(startX, currentX)
+      const y = Math.min(startY, currentY)
+      const width = Math.abs(currentX - startX)
+      const height = Math.abs(currentY - startY)
+      
+      setSelectionRect(prev => ({
+        ...prev,
+        x,
+        y,
+        width,
+        height
+      }))
+    }
   }
 
   function handleStageMouseUp() {
-    if (!resizeState.isResizing) return
+    // Handle panning completion
+    if (isPanning) {
+      setIsPanning(false)
+      setPanStart(null)
+      document.body.style.cursor = spacePressed ? 'grab' : ''
+      return
+    }
     
-    
-    const elementId = resizeState.elementId
-    
-    // Reset resize state
-    setResizeState({ 
-      isResizing: false, 
-      elementId: null, 
-      handleType: null, 
-      startPointer: null, 
-      originalBounds: null 
-    })
-    
-    // Persist changes to database only after resize ends
-    if (elementId) {
-      const currentElement = elements.find(el => el.id === elementId)
-      if (currentElement) {
-        updateElementInDB(elementId, {
-          x: currentElement.x,
-          y: currentElement.y,
-          width: currentElement.width,
-          height: currentElement.height
-        })
+    // Handle resize completion
+    if (resizeState.isResizing) {
+      const elementId = resizeState.elementId
+      
+      // Reset resize state
+      setResizeState({ 
+        isResizing: false, 
+        elementId: null, 
+        handleType: null, 
+        startPointer: null, 
+        originalBounds: null 
+      })
+      
+      // Persist changes to database only after resize ends
+      if (elementId) {
+        const currentElement = elements.find(el => el.id === elementId)
+        if (currentElement) {
+          updateElementInDB(elementId, {
+            x: currentElement.x,
+            y: currentElement.y,
+            width: currentElement.width,
+            height: currentElement.height
+          })
+        }
       }
+      return
+    }
+    
+    // Handle selection rectangle completion
+    if (selectionRect.visible) {
+      // Find elements that intersect with the selection rectangle
+      const selectedElements: string[] = []
+      
+      elements.forEach(element => {
+        const elementX = element.x || 0
+        const elementY = element.y || 0
+        const elementWidth = element.width || 0
+        const elementHeight = element.height || 0
+        
+        // Check if element intersects with selection rectangle
+        const isIntersecting = !(
+          elementX > selectionRect.x + selectionRect.width ||
+          elementX + elementWidth < selectionRect.x ||
+          elementY > selectionRect.y + selectionRect.height ||
+          elementY + elementHeight < selectionRect.y
+        )
+        
+        if (isIntersecting) {
+          selectedElements.push(element.id)
+        }
+      })
+      
+      // Only apply selection if we actually dragged (minimum 2px movement for higher sensitivity)
+      const draggedDistance = Math.abs(selectionRect.width) + Math.abs(selectionRect.height)
+      if (draggedDistance > 2) {
+        if (selectionRect.shiftHeld && selectedElements.length > 0) {
+          // Add to existing selection
+          const combinedSelection = [...new Set([...selectedElementIds, ...selectedElements])]
+          setSelectedElementIds(combinedSelection)
+        } else if (selectedElements.length > 0) {
+          // Replace selection
+          setSelectedElementIds(selectedElements)
+        }
+      }
+      
+      // Reset selection rectangle
+      setSelectionRect({
+        visible: false,
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        startX: 0,
+        startY: 0,
+        shiftHeld: false
+      })
     }
   }
 
@@ -1294,7 +1581,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   // Render left panel
   function renderLeftPanel() {
     return (
-      <div className="w-64 whimsical-card border-r border-purple-200 dark:border-purple-700 flex flex-col">
+      <div className="w-64 whimsical-card border-r-0 flex flex-col">
 
         {/* Tools Section */}
         <div className="p-4 border-b border-purple-200 dark:border-purple-700">
@@ -1491,13 +1778,16 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
 
   return (
     <div className="h-full flex relative z-10 bg-card">
-      {/* Left Panel */}
-      {renderLeftPanel()}
+      {/* Unified Panel Container */}
+      <div className="whimsical-card border-r border-purple-200 dark:border-purple-700 flex">
+        {/* Left Panel */}
+        {renderLeftPanel()}
+      </div>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Toolbar */}
-        <div className="bg-card border-b border-purple-200 dark:border-purple-700 p-3 flex items-center justify-between">
+        <div className="whimsical-card border-b border-purple-200 dark:border-purple-700 p-3 flex items-center justify-between">
           <div className="text-sm font-medium text-purple-700 dark:text-purple-300">
             {board.name} - Whiteboard
           </div>
@@ -1667,15 +1957,35 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
               )
             })()}
             
-            <div 
-              className={`text-xs px-2 py-1 rounded border font-medium ${
-                isZooming 
-                  ? 'bg-purple-500 text-white border-purple-400' 
-                  : 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-700'
-              }`}
-              title="Use mouse wheel to zoom, or Ctrl+Plus/Minus/0"
-            >
-              Zoom: {Math.round(stageScale * 100)}%
+            <div className="flex items-center gap-2">
+              <div 
+                className={`text-xs px-2 py-1 rounded border font-medium ${
+                  isZooming 
+                    ? 'bg-purple-500 text-white border-purple-400' 
+                    : 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-700'
+                }`}
+                title="Use Ctrl+scroll to zoom, or Ctrl+Plus/Minus/0"
+              >
+                Zoom: {Math.round(stageScale * 100)}%
+              </div>
+              
+              {spacePressed && (
+                <div 
+                  className="text-xs px-2 py-1 rounded border font-medium bg-green-500 text-white border-green-400"
+                  title="Pan mode active - click and drag to move around"
+                >
+                  🖐️ Pan Mode
+                </div>
+              )}
+              
+              {isPanning && (
+                <div 
+                  className="text-xs px-2 py-1 rounded border font-medium bg-blue-500 text-white border-blue-400"
+                  title="Currently panning"
+                >
+                  ↔️ Panning
+                </div>
+              )}
             </div>
             <ThemeToggle />
           </div>
@@ -1693,9 +2003,10 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
           y={stagePos.y}
           onWheel={handleWheel}
           onClick={handleStageClick}
+          onMouseDown={handleStageMouseDown}
           onMouseMove={handleStageMouseMove}
           onMouseUp={handleStageMouseUp}
-          draggable={activeTool === 'select' && !resizeState.isResizing}
+          draggable={false}
         >
           <Layer>
             {/* Dot Grid Pattern like Whimsical */}
@@ -1776,6 +2087,22 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
               const element = elements.find(el => el.id === elementId)
               return element ? renderResizeHandles(element) : null
             })}
+            
+            {/* Selection rectangle */}
+            {selectionRect.visible && (selectionRect.width > 1 || selectionRect.height > 1) && (
+              <Rect
+                x={selectionRect.x}
+                y={selectionRect.y}
+                width={selectionRect.width}
+                height={selectionRect.height}
+                fill="rgba(59, 130, 246, 0.08)"
+                stroke="#3b82f6"
+                strokeWidth={1.5 / stageScale}
+                dash={[4 / stageScale, 4 / stageScale]}
+                listening={false}
+                perfectDrawEnabled={false}
+              />
+            )}
           </Layer>
         </Stage>
         </div>

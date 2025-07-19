@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Plus, Settings, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
@@ -25,6 +25,7 @@ interface ProjectLayoutProps {
 
 export default function ProjectLayout({ projectId }: ProjectLayoutProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
   const { 
     currentProject, 
@@ -34,7 +35,8 @@ export default function ProjectLayout({ projectId }: ProjectLayoutProps) {
     currentBoard, 
     setCurrentBoard,
     user,
-    setUser
+    setUser,
+    setNavigationContext
   } = useAppStore()
   
   const [loading, setLoading] = useState(true)
@@ -44,6 +46,37 @@ export default function ProjectLayout({ projectId }: ProjectLayoutProps) {
   useEffect(() => {
     loadProject()
   }, [])
+
+  // Handle URL parameters for navigation context
+  useEffect(() => {
+    const tab = searchParams.get('tab')
+    const elements = searchParams.get('elements')
+    const boardId = searchParams.get('board')
+    
+    if (tab === 'whiteboard') {
+      setActiveTab('whiteboard')
+    } else if (tab === 'tasks') {
+      setActiveTab('tasks')
+    }
+    
+    // Handle board parameter for task-to-whiteboard navigation
+    if (boardId) {
+      const targetBoard = boards.find(b => b.id === boardId)
+      if (targetBoard) {
+        setCurrentBoard(targetBoard)
+      }
+    }
+    
+    if (elements) {
+      const elementIds = elements.split(',').filter(Boolean)
+      if (elementIds.length > 0) {
+        setNavigationContext({
+          elementIds,
+          fromTask: true
+        })
+      }
+    }
+  }, [searchParams, setNavigationContext, boards, setCurrentBoard])
 
   const loadProject = useCallback(async () => {
     try {
@@ -122,6 +155,22 @@ export default function ProjectLayout({ projectId }: ProjectLayoutProps) {
     await createBoard(name.trim(), 'whiteboard')
   }
 
+  function switchToTab(tab: 'whiteboard' | 'tasks', board?: Board) {
+    // Clear navigation context when manually switching tabs
+    setNavigationContext(null)
+    
+    // Update active tab
+    setActiveTab(tab)
+    
+    // Set board if provided
+    if (board) {
+      setCurrentBoard(board)
+    }
+    
+    // Update URL to remove query parameters including board
+    router.replace(`/project/${projectId}`)
+  }
+
   const whiteboards = boards.filter(b => b.type === 'whiteboard')
   const taskBoard = boards.find(b => b.type === 'tasks')
 
@@ -184,10 +233,7 @@ export default function ProjectLayout({ projectId }: ProjectLayoutProps) {
             {whiteboards.map((board) => (
               <button
                 key={board.id}
-                onClick={() => {
-                  setCurrentBoard(board)
-                  setActiveTab('whiteboard')
-                }}
+                onClick={() => switchToTab('whiteboard', board)}
                 className={`px-2 py-1 rounded-md text-sm font-medium transition-colors ${
                   currentBoard?.id === board.id && activeTab === 'whiteboard'
                     ? 'bg-primary text-primary-foreground'
@@ -209,10 +255,7 @@ export default function ProjectLayout({ projectId }: ProjectLayoutProps) {
           {/* Task board tab */}
           <div className="border-l border-border pl-5">
             <button
-              onClick={() => {
-                setActiveTab('tasks')
-                if (taskBoard) setCurrentBoard(taskBoard)
-              }}
+              onClick={() => switchToTab('tasks', taskBoard)}
               className={`px-2 py-1 rounded-md text-sm font-medium transition-colors ${
                 activeTab === 'tasks'
                   ? 'bg-primary text-primary-foreground'
