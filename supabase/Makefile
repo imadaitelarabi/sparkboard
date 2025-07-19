@@ -167,9 +167,9 @@ gen-types:
 		echo "❌ Supabase CLI not found. Install it with: npm install -g supabase"; \
 		exit 1; \
 	fi
-	@mkdir -p ../web-2/src/types
-	@supabase gen types typescript --local > ../web-2/src/types/database.types.ts
-	@echo "✅ Types generated at ../web-2/src/types/database.types.ts"
+	@mkdir -p ../web/src/types
+	@supabase gen types typescript --local > ../web/src/types/database.types.ts
+	@echo "✅ Types generated at ../web/src/types/database.types.ts"
 
 # Link to Supabase project (for initial setup)
 link:
@@ -314,13 +314,13 @@ switch-to-local:
 	@supabase status
 	@echo ""
 	@echo "4️⃣ Generating local TypeScript types..."
-	@mkdir -p ../web-2/src/types
-	@supabase gen types typescript --local > ../web-2/src/types/database.types.ts
-	@echo "✅ Types generated at ../web-2/src/types/database.types.ts"
+	@mkdir -p ../web/src/types
+	@supabase gen types typescript --local > ../web/src/types/database.types.ts
+	@echo "✅ Types generated at ../web/src/types/database.types.ts"
 	@echo ""
 	@echo "🔧 NEXT STEP - Update your .env file:"
 	@echo "====================================="; \
-	echo "Update ../web-2/.env with these values:"; \
+	echo "Update ../web/.env with these values:"; \
 	echo ""; \
 	echo "PUBLIC_SUPABASE_ENABLED=true"; \
 	echo "PUBLIC_SUPABASE_URL=http://127.0.0.1:54321"; \
@@ -355,13 +355,13 @@ switch-to-prod:
 	@supabase migration list || echo "⚠️  Migration list may be empty if this is a new project"
 	@echo ""
 	@echo "4️⃣ Generating production TypeScript types..."
-	@mkdir -p ../web-2/src/types
-	@supabase gen types typescript > ../web-2/src/types/database.types.ts
-	@echo "✅ Types generated at ../web-2/src/types/database.types.ts"
+	@mkdir -p ../web/src/types
+	@supabase gen types typescript > ../web/src/types/database.types.ts
+	@echo "✅ Types generated at ../web/src/types/database.types.ts"
 	@echo ""
 	@echo "🔧 NEXT STEP - Update your .env file:"
 	@echo "====================================="; \
-	echo "Update ../web-2/.env with these values:"; \
+	echo "Update ../web/.env with these values:"; \
 	echo ""; \
 	echo "PUBLIC_SUPABASE_ENABLED=true"; \
 	echo "PUBLIC_SUPABASE_URL=https://$(PROJECT_REF).supabase.co"; \
@@ -404,17 +404,17 @@ env-status:
 	fi
 	@echo ""
 	@echo "📁 Environment file status:"
-	@if [ -f "../web-2/.env" ]; then \
-		echo "✅ .env file exists at ../web-2/.env"; \
-		if grep -q "127.0.0.1\|localhost" ../web-2/.env 2>/dev/null; then \
+	@if [ -f "../web/.env" ]; then \
+		echo "✅ .env file exists at ../web/.env"; \
+		if grep -q "127.0.0.1\|localhost" ../web/.env 2>/dev/null; then \
 			echo "🏠 .env configured for: LOCAL"; \
-		elif grep -q "supabase.co" ../web-2/.env 2>/dev/null; then \
+		elif grep -q "supabase.co" ../web/.env 2>/dev/null; then \
 			echo "🌐 .env configured for: PRODUCTION"; \
 		else \
 			echo "⚠️  .env configuration unclear"; \
 		fi; \
 	else \
-		echo "❌ No .env file found at ../web-2/.env"; \
+		echo "❌ No .env file found at ../web/.env"; \
 		echo "   Create one using: make switch-to-local OR make switch-to-prod"; \
 	fi
 	@echo ""
