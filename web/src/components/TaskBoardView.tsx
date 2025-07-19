@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Plus, MoreHorizontal, Calendar, User, ExternalLink } from 'lucide-react'
+import { useEffect, useState, useCallback } from 'react'
+import { Plus, MoreHorizontal, Calendar, User, ExternalLink, Edit, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
 import { useRouter } from 'next/navigation'
 import { Database } from '@/types/database.types'
 import InputModal from './InputModal'
+import ConfirmationModal from './ConfirmationModal'
+import TaskEditModal from './TaskEditModal'
 
 type Tables = Database['public']['Tables']
 type Board = Tables['boards']['Row']
@@ -41,12 +43,11 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
   const [draggedTask, setDraggedTask] = useState<string | null>(null)
   const [showCreateTaskModal, setShowCreateTaskModal] = useState<string | null>(null)
   const [showCreateCategoryModal, setShowCreateCategoryModal] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
+  const [editingTask, setEditingTask] = useState<TaskWithDetails | null>(null)
+  const [taskMenuOpen, setTaskMenuOpen] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadTasksAndCategories()
-  }, [project.id])
-
-  async function loadTasksAndCategories() {
+  const loadTasksAndCategories = useCallback(async () => {
     try {
       // Load task categories for this project
       const { data: categoriesData, error: categoriesError } = await supabase
@@ -78,7 +79,23 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [project.id, supabase, setTaskCategories, setTasks])
+
+  useEffect(() => {
+    loadTasksAndCategories()
+  }, [project.id, loadTasksAndCategories])
+
+  // Close task menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (taskMenuOpen && !(e.target as HTMLElement).closest('[data-action-menu]')) {
+        setTaskMenuOpen(null)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [taskMenuOpen])
 
   async function createTask(categoryId: string, title: string) {
     if (!user || !title.trim()) return
@@ -162,6 +179,42 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
     if (draggedTask) {
       updateTaskCategory(draggedTask, categoryId)
       setDraggedTask(null)
+    }
+  }
+
+  async function updateTask(taskId: string, updates: Partial<Task>) {
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update(updates)
+        .eq('id', taskId)
+
+      if (error) throw error
+
+      // Update local state
+      setTasks(tasks.map(task => 
+        task.id === taskId 
+          ? { ...task, ...updates }
+          : task
+      ))
+    } catch (error) {
+      console.error('Error updating task:', error)
+    }
+  }
+
+  async function deleteTask(taskId: string) {
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', taskId)
+
+      if (error) throw error
+
+      // Update local state
+      setTasks(tasks.filter(task => task.id !== taskId))
+    } catch (error) {
+      console.error('Error deleting task:', error)
     }
   }
 
@@ -272,7 +325,7 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
                   onDragStart={() => handleDragStart(task.id)}
                   onClick={(e) => {
                     // Only navigate if clicking the task card itself, not the action button
-                    if (!(e.target as HTMLElement).closest('button')) {
+                    if (!(e.target as HTMLElement).closest('button, [data-action-menu]')) {
                       handleTaskClick(task)
                     }
                   }}
@@ -286,9 +339,44 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
                     <h4 className="font-medium text-foreground text-xs leading-4">
                       {task.title}
                     </h4>
-                    <button className="p-0.5 hover:bg-accent rounded transition-colors">
-                      <MoreHorizontal className="h-3 w-3 text-muted-foreground" />
-                    </button>
+                    <div className="relative" data-action-menu>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setTaskMenuOpen(taskMenuOpen === task.id ? null : task.id)
+                        }}
+                        className="p-0.5 hover:bg-accent rounded transition-colors"
+                      >
+                        <MoreHorizontal className="h-3 w-3 text-muted-foreground" />
+                      </button>
+                      
+                      {taskMenuOpen === task.id && (
+                        <div className="absolute right-0 mt-1 w-32 bg-card border border-border rounded-md shadow-lg z-10 animate-in fade-in slide-in-from-top-1 duration-fast">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setEditingTask(task)
+                              setTaskMenuOpen(null)
+                            }}
+                            className="w-full px-3 py-1.5 text-left text-xs hover:bg-accent flex items-center gap-2 transition-colors"
+                          >
+                            <Edit className="h-3 w-3" />
+                            Edit
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setShowDeleteConfirm(task.id)
+                              setTaskMenuOpen(null)
+                            }}
+                            className="w-full px-3 py-1.5 text-left text-xs hover:bg-accent text-destructive flex items-center gap-2 transition-colors"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {task.description && (
@@ -396,6 +484,35 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
         title="Create New Category"
         placeholder="Enter category name..."
         submitText="Create Category"
+      />
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={!!showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(null)}
+        onConfirm={() => {
+          if (showDeleteConfirm) {
+            deleteTask(showDeleteConfirm)
+          }
+          setShowDeleteConfirm(null)
+        }}
+        title="Delete Task"
+        message="Are you sure you want to delete this task? This action cannot be undone."
+        confirmText="Delete"
+        destructive={true}
+      />
+
+      {/* Edit Task Modal */}
+      <TaskEditModal
+        isOpen={!!editingTask}
+        onClose={() => setEditingTask(null)}
+        onSave={(updates) => {
+          if (editingTask) {
+            updateTask(editingTask.id, updates)
+          }
+          setEditingTask(null)
+        }}
+        task={editingTask}
       />
     </div>
   )
