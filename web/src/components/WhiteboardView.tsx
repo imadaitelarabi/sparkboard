@@ -322,7 +322,6 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   // Panning state for two-finger/middle-mouse panning
   const [isPanning, setIsPanning] = useState(false)
   const [panStart, setPanStart] = useState<{ x: number; y: number; stageX: number; stageY: number } | null>(null)
-  const [spacePressed, setSpacePressed] = useState(false)
 
   // Auto-select appropriate color when switching tools
   const handleToolChange = (toolType: ToolType) => {
@@ -625,17 +624,9 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [contextMenu])
 
-  // Keyboard shortcuts for zoom and space bar panning
+  // Keyboard shortcuts for zoom
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      // Space bar for panning mode
-      if (event.code === 'Space' && !spacePressed) {
-        event.preventDefault()
-        setSpacePressed(true)
-        document.body.style.cursor = 'grab'
-        return
-      }
-      
       if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
         if (event.key === '=' || event.key === '+') {
           event.preventDefault()
@@ -658,26 +649,11 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       }
     }
     
-    function handleKeyUp(event: KeyboardEvent) {
-      // Space bar release
-      if (event.code === 'Space') {
-        setSpacePressed(false)
-        document.body.style.cursor = ''
-        // Stop panning if currently panning with space
-        if (isPanning) {
-          setIsPanning(false)
-          setPanStart(null)
-        }
-      }
-    }
-    
     document.addEventListener('keydown', handleKeyDown)
-    document.addEventListener('keyup', handleKeyUp)
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
-      document.removeEventListener('keyup', handleKeyUp)
     }
-  }, [stageScale, spacePressed, isPanning])
+  }, [stageScale])
 
   async function loadElements() {
     try {
@@ -974,13 +950,10 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     // Close context menu
     setContextMenu(null)
 
-    // Check for panning gestures (middle mouse button, space+click, or two-finger equivalent)
+    // Check for middle mouse button panning only
     const isMiddleClick = e.evt.button === 1
-    const isSpaceClick = e.evt.button === 0 && spacePressed // Space + left click
-    const isRightClickPan = e.evt.button === 2 && e.evt.shiftKey // Shift+Right click
-    const isShiftMetaClick = e.evt.button === 0 && e.evt.shiftKey && e.evt.metaKey // Shift+Cmd+Click for Mac
     
-    if (isMiddleClick || isSpaceClick || isRightClickPan || isShiftMetaClick) {
+    if (isMiddleClick) {
       // Start panning
       setIsPanning(true)
       setPanStart({
@@ -1293,7 +1266,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     if (isPanning) {
       setIsPanning(false)
       setPanStart(null)
-      document.body.style.cursor = spacePressed ? 'grab' : ''
+      document.body.style.cursor = ''
       return
     }
     
@@ -1969,14 +1942,6 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
                 Zoom: {Math.round(stageScale * 100)}%
               </div>
               
-              {spacePressed && (
-                <div 
-                  className="text-xs px-2 py-1 rounded border font-medium bg-green-500 text-white border-green-400"
-                  title="Pan mode active - click and drag to move around"
-                >
-                  🖐️ Pan Mode
-                </div>
-              )}
               
               {isPanning && (
                 <div 
