@@ -320,7 +320,7 @@ switch-to-local:
 	@echo ""
 	@echo "🔧 NEXT STEP - Update your .env file:"
 	@echo "====================================="; \
-	echo "Update ../web/.env with these values:"; \
+	echo "Update ../web/.env.local with these values:"; \
 	echo ""; \
 	echo "PUBLIC_SUPABASE_ENABLED=true"; \
 	echo "PUBLIC_SUPABASE_URL=http://127.0.0.1:54321"; \
@@ -361,7 +361,7 @@ switch-to-prod:
 	@echo ""
 	@echo "🔧 NEXT STEP - Update your .env file:"
 	@echo "====================================="; \
-	echo "Update ../web/.env with these values:"; \
+	echo "Update ../web/.env.local with these values:"; \
 	echo ""; \
 	echo "PUBLIC_SUPABASE_ENABLED=true"; \
 	echo "PUBLIC_SUPABASE_URL=https://$(PROJECT_REF).supabase.co"; \
@@ -404,17 +404,17 @@ env-status:
 	fi
 	@echo ""
 	@echo "📁 Environment file status:"
-	@if [ -f "../web/.env" ]; then \
-		echo "✅ .env file exists at ../web/.env"; \
-		if grep -q "127.0.0.1\|localhost" ../web/.env 2>/dev/null; then \
+	@if [ -f "../web/.env.local" ]; then \
+		echo "✅ .env file exists at ../web/.env.local"; \
+		if grep -q "127.0.0.1\|localhost" ../web/.env.local 2>/dev/null; then \
 			echo "🏠 .env configured for: LOCAL"; \
-		elif grep -q "supabase.co" ../web/.env 2>/dev/null; then \
+		elif grep -q "supabase.co" ../web/.env.local 2>/dev/null; then \
 			echo "🌐 .env configured for: PRODUCTION"; \
 		else \
 			echo "⚠️  .env configuration unclear"; \
 		fi; \
 	else \
-		echo "❌ No .env file found at ../web/.env"; \
+		echo "❌ No .env file found at ../web/.env.local"; \
 		echo "   Create one using: make switch-to-local OR make switch-to-prod"; \
 	fi
 	@echo ""
