@@ -598,10 +598,14 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
         // Select the elements
         setSelectedElementIds(validElementIds)
         
-        // Center view on selected elements
+        // Center view on selected elements with a small delay to ensure elements are rendered
         setTimeout(() => {
           centerViewOnElements(validElementIds)
-        }, 100)
+        }, 200)
+      } else {
+        // Reset to a reasonable default view if no elements found
+        setStageScale(0.5)
+        setStagePos({ x: 0, y: 0 })
       }
       
       // Clear navigation context after handling
@@ -676,19 +680,26 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     const stage = stageRef.current
     const stageWidth = stage.width()
     const stageHeight = stage.height()
-
+    
     // Calculate the bounding box of all selected elements
     const selectedElements = elements.filter(el => elementIds.includes(el.id))
     if (selectedElements.length === 0) return
 
+    // Calculate element positions and bounding box
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    const elementPositions: Array<{ element: typeof selectedElements[0], x: number, y: number, width: number, height: number, centerX: number, centerY: number }> = []
 
     selectedElements.forEach(element => {
-      const props = element.properties as ElementProperties || {}
-      const x = props.x || 0
-      const y = props.y || 0
-      const width = props.width || 100
-      const height = props.height || 100
+      // Use the actual element position (what the renderer uses)
+      const x = element.x || 0
+      const y = element.y || 0
+      const width = element.width || 100
+      const height = element.height || 100
+      const centerX = x + width / 2
+      const centerY = y + height / 2
+
+
+      elementPositions.push({ element, x, y, width, height, centerX, centerY })
 
       minX = Math.min(minX, x)
       minY = Math.min(minY, y)
@@ -696,35 +707,173 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       maxY = Math.max(maxY, y + height)
     })
 
+    const elementsWidth = maxX - minX
+    const elementsHeight = maxY - minY
     const centerX = (minX + maxX) / 2
     const centerY = (minY + maxY) / 2
 
-    // Calculate scale to fit elements with some padding
-    const elementsWidth = maxX - minX
-    const elementsHeight = maxY - minY
-    const padding = 100 // pixels of padding around elements
 
-    const scaleX = (stageWidth - padding * 2) / elementsWidth
-    const scaleY = (stageHeight - padding * 2) / elementsHeight
-    const newScale = Math.min(scaleX, scaleY, 1.5) // Don't zoom in too much
+    // Check if elements are very distant from each other
+    const maxDistance = Math.max(elementsWidth, elementsHeight)
+    const avgElementSize = elementPositions.reduce((sum, pos) => sum + Math.max(pos.width, pos.height), 0) / elementPositions.length
+    const distanceRatio = maxDistance / avgElementSize
 
-    // Calculate new position to center the elements
-    const newX = stageWidth / 2 - centerX * newScale
-    const newY = stageHeight / 2 - centerY * newScale
+    // If elements are very far apart (distance ratio > 10), consider grouping them
+    const shouldGroup = distanceRatio > 10 && selectedElements.length > 1
 
-    // Update stage position and scale
-    setStageScale(newScale)
-    setStagePos({ x: newX, y: newY })
+    if (shouldGroup) {
+      
+      // Calculate optimal grouping position (viewport center)
+      const targetCenterX = stageWidth / (2 * stageScale) - stagePos.x / stageScale
+      const targetCenterY = stageHeight / (2 * stageScale) - stagePos.y / stageScale
+      
+      // Group elements closer together around the target center
+      const groupRadius = Math.min(300, Math.max(200, avgElementSize * 3))
+      const angleStep = (2 * Math.PI) / elementPositions.length
+      
+      // Create smooth grouped positions
+      const groupedPositions = elementPositions.map((pos, index) => {
+        let newX, newY
+        
+        if (elementPositions.length === 1) {
+          newX = targetCenterX - pos.width / 2
+          newY = targetCenterY - pos.height / 2
+        } else if (elementPositions.length === 2) {
+          // Place two elements side by side
+          const spacing = Math.max(pos.width, pos.height) + 50
+          newX = targetCenterX + (index === 0 ? -spacing/2 : spacing/2) - pos.width / 2
+          newY = targetCenterY - pos.height / 2
+        } else {
+          // Arrange in a circle or grid pattern
+          const angle = angleStep * index
+          const radius = Math.min(groupRadius, groupRadius * Math.sqrt(elementPositions.length) / 3)
+          newX = targetCenterX + Math.cos(angle) * radius - pos.width / 2
+          newY = targetCenterY + Math.sin(angle) * radius - pos.height / 2
+        }
+        
+        return { ...pos, newX, newY }
+      })
 
-    // Add a subtle animation effect
-    stage.to({
-      duration: 0.3,
-      x: newX,
-      y: newY,
-      scaleX: newScale,
-      scaleY: newScale,
-      easing: Konva.Easings.EaseOut
-    })
+      // Update elements with their new grouped positions
+      const updatedElementsMap = new Map(groupedPositions.map(({ element, newX, newY }) => [
+        element.id,
+        {
+          ...element,
+          properties: {
+            ...(element.properties as Record<string, unknown> || {}),
+            x: newX,
+            y: newY
+          }
+        }
+      ]))
+
+      // Update all elements in a single setState call
+      // @ts-expect-error - TypeScript is being too strict about element types
+      setElements(prev => prev.map(el => updatedElementsMap.get(el.id) || el))
+      
+      // Update positions in database asynchronously
+      groupedPositions.forEach(async ({ element, newX, newY }) => {
+        try {
+          const newProperties = {
+            ...(element.properties as Record<string, unknown> || {}),
+            x: newX,
+            y: newY
+          }
+          
+          await supabase
+            .from('elements')
+            .update({ properties: newProperties })
+            .eq('id', element.id)
+        } catch (error) {
+          console.error('Error updating element position:', error)
+        }
+      })
+
+      // Calculate new bounding box after grouping
+      const groupedMinX = Math.min(...groupedPositions.map(p => p.newX))
+      const groupedMinY = Math.min(...groupedPositions.map(p => p.newY))
+      const groupedMaxX = Math.max(...groupedPositions.map(p => p.newX + p.width))
+      const groupedMaxY = Math.max(...groupedPositions.map(p => p.newY + p.height))
+      
+      const groupedCenterX = (groupedMinX + groupedMaxX) / 2
+      const groupedCenterY = (groupedMinY + groupedMaxY) / 2
+      const groupedWidth = groupedMaxX - groupedMinX
+      const groupedHeight = groupedMaxY - groupedMinY
+
+      // Calculate scale and position for grouped elements
+      const padding = 150
+      const scaleX = (stageWidth - padding * 2) / groupedWidth
+      const scaleY = (stageHeight - padding * 2) / groupedHeight
+      const calculatedScale = Math.min(scaleX, scaleY)
+      const newScale = Math.min(Math.max(calculatedScale, 0.1), 1.0) // Same conservative limits
+
+      // Center the grouped elements in viewport
+      const viewportCenterX = stageWidth / 2
+      const viewportCenterY = stageHeight / 2
+      const newX = viewportCenterX - (groupedCenterX * newScale)
+      const newY = viewportCenterY - (groupedCenterY * newScale)
+
+
+      // Update stage with smoother animation for grouped elements
+      setStageScale(newScale)
+      setStagePos({ x: newX, y: newY })
+
+      stage.to({
+        duration: 0.5,
+        x: newX,
+        y: newY,
+        scaleX: newScale,
+        scaleY: newScale,
+        easing: Konva.Easings.EaseInOut
+      })
+
+    } else {
+      // Use original centering logic for elements that are close together
+      // Calculate scale to fit elements with some padding
+      const padding = 100
+      
+      // Handle case where elements have zero width/height
+      const safeElementsWidth = Math.max(elementsWidth, 100)
+      const safeElementsHeight = Math.max(elementsHeight, 100)
+      
+      const scaleX = (stageWidth - padding * 2) / safeElementsWidth
+      const scaleY = (stageHeight - padding * 2) / safeElementsHeight
+      
+      // More conservative scale limits - don't zoom in too much
+      const calculatedScale = Math.min(scaleX, scaleY)
+      const newScale = Math.min(Math.max(calculatedScale, 0.1), 1.0) // Clamp between 0.1x and 1.0x
+      
+      // Calculate new position to center the elements in the viewport
+      // We want the element center to appear at the viewport center
+      // Stage positioning: negative values move content left/up, positive values move content right/down
+      const viewportCenterX = stageWidth / 2
+      const viewportCenterY = stageHeight / 2
+      
+      // Calculate where the element center will be in screen coordinates
+      // We need: elementWorldPos * scale + stagePos = viewportCenter
+      // So: stagePos = viewportCenter - (elementWorldPos * scale)
+      
+      // WAIT - I think the issue is that elements at (0,0) means their TOP-LEFT is at (0,0)
+      // But their CENTER is at (50, 50) assuming 100x100 size
+      // We want the CENTER to appear at viewport center
+      
+      const newX = viewportCenterX - (centerX * newScale)
+      const newY = viewportCenterY - (centerY * newScale)
+
+      // Update stage position and scale
+      setStageScale(newScale)
+      setStagePos({ x: newX, y: newY })
+
+      // Add a subtle animation effect - animate the stage itself
+      stage.to({
+        duration: 0.3,
+        x: newX,
+        y: newY,
+        scaleX: newScale,
+        scaleY: newScale,
+        easing: Konva.Easings.EaseOut
+      })
+    }
   }
 
   async function createElement(type: string, x: number, y: number, properties: Record<string, unknown> = {}) {

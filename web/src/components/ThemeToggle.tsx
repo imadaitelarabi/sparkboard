@@ -44,7 +44,7 @@ export function ThemeToggle() {
                 <button
                   key={option.value}
                   onClick={() => {
-                    setTheme(option.value as any)
+                    setTheme(option.value as 'light' | 'dark' | 'system')
                     setIsOpen(false)
                   }}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:scale-105 ${
