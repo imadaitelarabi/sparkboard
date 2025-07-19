@@ -10,13 +10,17 @@ import {
   ArrowRight, 
   StickyNote, 
   MousePointer, 
-  Trash2
+  Trash2,
+  Plus,
+  Copy,
+  Layers
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
 import { Database } from '@/types/database.types'
 import CreateTaskModal from './CreateTaskModal'
 import InputModal from './InputModal'
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 
 type Tables = Database['public']['Tables']
 type Board = Tables['boards']['Row']
@@ -27,6 +31,220 @@ interface WhiteboardViewProps {
 }
 
 type ToolType = 'select' | 'rectangle' | 'circle' | 'text' | 'arrow' | 'sticky_note'
+
+// Helper function to get computed color value
+function getComputedColor(cssVar: string): string {
+  if (typeof window === 'undefined') return '#6366f1' // fallback for SSR
+  
+  try {
+    const computedStyle = getComputedStyle(document.documentElement)
+    const varName = cssVar.replace('var(', '').replace(')', '').trim()
+    let value = computedStyle.getPropertyValue(varName).trim()
+    
+    // If value is empty, try alternative approaches
+    if (!value) {
+      // Try getting from :root specifically
+      const rootStyle = getComputedStyle(document.querySelector(':root')!)
+      value = rootStyle.getPropertyValue(varName).trim()
+    }
+    
+    // Ensure we have a valid hex color
+    if (value && value.startsWith('#') && value.length >= 4) {
+      return value
+    }
+    
+    // Convert rgb() to hex if needed
+    if (value && value.startsWith('rgb')) {
+      const matches = value.match(/rgb\\((\\d+),\\s*(\\d+),\\s*(\\d+)\\)/)
+      if (matches) {
+        const r = parseInt(matches[1])
+        const g = parseInt(matches[2])
+        const b = parseInt(matches[3])
+        return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)
+      }
+    }
+    
+    // Fallback color map for common CSS variables
+    const fallbackColors: Record<string, string> = {
+      '--color-primary-300': '#a5b4fc',
+      '--color-primary-500': '#6366f1',
+      '--color-primary-700': '#4338ca',
+      '--color-secondary-300': '#7dd3fc',
+      '--color-secondary-500': '#0ea5e9',
+      '--color-secondary-700': '#0369a1',
+      '--color-accent-300': '#6ee7b7',
+      '--color-accent-500': '#10b981',
+      '--color-accent-700': '#047857',
+      '--color-warning-300': '#fdba74',
+      '--color-warning-500': '#f97316',
+      '--color-warning-700': '#c2410c',
+      '--color-success-300': '#86efac',
+      '--color-success-500': '#22c55e',
+      '--color-success-700': '#15803d',
+      '--color-destructive-300': '#fca5a5',
+      '--color-destructive-500': '#ef4444',
+      '--color-destructive-700': '#b91c1c',
+      '--color-gray-200': '#e5e7eb',
+      '--color-gray-400': '#9ca3af',
+      '--color-gray-600': '#4b5563',
+      '--color-gray-800': '#1f2937',
+      '--color-gray-900': '#111827'
+    }
+    
+    return fallbackColors[varName] || '#6366f1'
+  } catch (error) {
+    console.warn('Error getting computed color for', cssVar, error)
+    return '#6366f1'
+  }
+}
+
+// Expanded theme-based color palette for whiteboard elements
+const ELEMENT_COLORS = {
+  // Primary colors
+  'primary-light': {
+    fill: 'var(--color-primary-300)',
+    stroke: 'var(--color-primary-500)',
+    name: 'Primary Light'
+  },
+  'primary': {
+    fill: 'var(--color-primary-500)',
+    stroke: 'var(--color-primary-700)',
+    name: 'Primary'
+  },
+  'primary-dark': {
+    fill: 'var(--color-primary-700)',
+    stroke: 'var(--color-primary-900)',
+    name: 'Primary Dark'
+  },
+  
+  // Secondary colors
+  'secondary-light': {
+    fill: 'var(--color-secondary-300)',
+    stroke: 'var(--color-secondary-500)',
+    name: 'Secondary Light'
+  },
+  'secondary': {
+    fill: 'var(--color-secondary-500)',
+    stroke: 'var(--color-secondary-700)',
+    name: 'Secondary'
+  },
+  'secondary-dark': {
+    fill: 'var(--color-secondary-700)',
+    stroke: 'var(--color-secondary-900)',
+    name: 'Secondary Dark'
+  },
+  
+  // Accent colors
+  'accent-light': {
+    fill: 'var(--color-accent-300)',
+    stroke: 'var(--color-accent-500)',
+    name: 'Accent Light'
+  },
+  'accent': {
+    fill: 'var(--color-accent-500)',
+    stroke: 'var(--color-accent-700)',
+    name: 'Accent'
+  },
+  'accent-dark': {
+    fill: 'var(--color-accent-700)',
+    stroke: 'var(--color-accent-900)',
+    name: 'Accent Dark'
+  },
+  
+  // Warning colors
+  'warning-light': {
+    fill: 'var(--color-warning-300)',
+    stroke: 'var(--color-warning-500)',
+    name: 'Warning Light'
+  },
+  'warning': {
+    fill: 'var(--color-warning-500)',
+    stroke: 'var(--color-warning-700)',
+    name: 'Warning'
+  },
+  'warning-dark': {
+    fill: 'var(--color-warning-700)',
+    stroke: 'var(--color-warning-900)',
+    name: 'Warning Dark'
+  },
+  
+  // Success colors
+  'success-light': {
+    fill: 'var(--color-success-300)',
+    stroke: 'var(--color-success-500)',
+    name: 'Success Light'
+  },
+  'success': {
+    fill: 'var(--color-success-500)',
+    stroke: 'var(--color-success-700)',
+    name: 'Success'
+  },
+  'success-dark': {
+    fill: 'var(--color-success-700)',
+    stroke: 'var(--color-success-900)',
+    name: 'Success Dark'
+  },
+  
+  // Destructive colors
+  'destructive-light': {
+    fill: 'var(--color-destructive-300)',
+    stroke: 'var(--color-destructive-500)',
+    name: 'Destructive Light'
+  },
+  'destructive': {
+    fill: 'var(--color-destructive-500)',
+    stroke: 'var(--color-destructive-700)',
+    name: 'Destructive'
+  },
+  'destructive-dark': {
+    fill: 'var(--color-destructive-700)',
+    stroke: 'var(--color-destructive-900)',
+    name: 'Destructive Dark'
+  },
+  
+  // Gray colors
+  'gray-light': {
+    fill: 'var(--color-gray-200)',
+    stroke: 'var(--color-gray-400)',
+    name: 'Gray Light'
+  },
+  'gray': {
+    fill: 'var(--color-gray-400)',
+    stroke: 'var(--color-gray-600)',
+    name: 'Gray'
+  },
+  'gray-dark': {
+    fill: 'var(--color-gray-600)',
+    stroke: 'var(--color-gray-800)',
+    name: 'Gray Dark'
+  },
+  
+  // Pure colors
+  'white': {
+    fill: '#ffffff',
+    stroke: 'var(--color-gray-400)',
+    name: 'White'
+  },
+  'black': {
+    fill: 'var(--color-gray-900)',
+    stroke: 'var(--color-gray-700)',
+    name: 'Black'
+  }
+} as const
+
+type ElementColorKey = keyof typeof ELEMENT_COLORS
+
+// Default colors for different element types
+const DEFAULT_ELEMENT_COLORS: Record<string, ElementColorKey> = {
+  rectangle: 'primary',
+  circle: 'secondary', 
+  text: 'accent',
+  arrow: 'gray',
+  sticky_note: 'warning'
+}
+
+// Primary 4 colors for quick selection
+const PRIMARY_COLORS: ElementColorKey[] = ['primary', 'secondary', 'accent', 'warning']
 
 interface WhiteboardElement extends Element {
   konvaRef?: Konva.Node
@@ -54,10 +272,305 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   const [stageScale, setStageScale] = useState(1)
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 })
   const [editingElement, setEditingElement] = useState<{ id: string; text: string } | null>(null)
+  const [selectedColor, setSelectedColor] = useState<ElementColorKey>('primary')
+  const [showFloatingColorPicker, setShowFloatingColorPicker] = useState(false)
+  const [customColor, setCustomColor] = useState('#6366f1')
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; elementId: string } | null>(null)
+  const [clipboard, setClipboard] = useState<Element[]>([])
+
+  // Auto-select appropriate color when switching tools
+  const handleToolChange = (toolType: ToolType) => {
+    setActiveTool(toolType)
+    if (toolType !== 'select' && DEFAULT_ELEMENT_COLORS[toolType]) {
+      setSelectedColor(DEFAULT_ELEMENT_COLORS[toolType])
+    }
+  }
+
+  // Copy selected elements to clipboard
+  const copyElements = () => {
+    const selectedElements = elements.filter(el => selectedElementIds.includes(el.id))
+    setClipboard(selectedElements)
+  }
+
+  // Paste elements from clipboard
+  const pasteElements = async () => {
+    if (clipboard.length === 0) return
+
+    const offset = 20 // Offset to avoid pasting exactly on top
+    const newElements = []
+
+    for (const element of clipboard) {
+      const newElement = {
+        board_id: board.id,
+        type: element.type,
+        x: (element.x || 0) + offset,
+        y: (element.y || 0) + offset,
+        width: element.width,
+        height: element.height,
+        rotation: element.rotation,
+        properties: element.properties,
+        layer_index: elements.length + newElements.length,
+        created_by: (user as { id: string } | null)?.id || ''
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('elements')
+          .insert(newElement)
+          .select()
+          .single()
+
+        if (error) throw error
+        newElements.push(data)
+      } catch (error) {
+        console.error('Error pasting element:', error)
+      }
+    }
+
+    // Add all new elements to store and select them
+    newElements.forEach(element => addElement(element))
+    setSelectedElementIds(newElements.map(el => el.id))
+  }
+
+  // Duplicate selected elements
+  const duplicateElements = async () => {
+    const selectedElements = elements.filter(el => selectedElementIds.includes(el.id))
+    if (selectedElements.length === 0) return
+
+    const offset = 20 // Offset to avoid duplicating exactly on top
+    const newElements = []
+
+    for (const element of selectedElements) {
+      const newElement = {
+        board_id: board.id,
+        type: element.type,
+        x: (element.x || 0) + offset,
+        y: (element.y || 0) + offset,
+        width: element.width,
+        height: element.height,
+        rotation: element.rotation,
+        properties: element.properties,
+        layer_index: elements.length + newElements.length,
+        created_by: (user as { id: string } | null)?.id || ''
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('elements')
+          .insert(newElement)
+          .select()
+          .single()
+
+        if (error) throw error
+        newElements.push(data)
+      } catch (error) {
+        console.error('Error duplicating element:', error)
+      }
+    }
+
+    // Add all new elements to store and select them
+    newElements.forEach(element => addElement(element))
+    setSelectedElementIds(newElements.map(el => el.id))
+  }
+
+  // Keyboard shortcuts for whiteboard
+  useKeyboardShortcuts([
+    // Tool selection shortcuts
+    {
+      key: 'v',
+      callback: () => setActiveTool('select'),
+      description: 'Select tool'
+    },
+    {
+      key: 'r',
+      callback: () => handleToolChange('rectangle'),
+      description: 'Rectangle tool'
+    },
+    {
+      key: 'c',
+      callback: () => handleToolChange('circle'),
+      description: 'Circle tool'
+    },
+    {
+      key: 't',
+      callback: () => handleToolChange('text'),
+      description: 'Text tool'
+    },
+    {
+      key: 'a',
+      callback: () => handleToolChange('arrow'),
+      description: 'Arrow tool'
+    },
+    {
+      key: 's',
+      callback: () => handleToolChange('sticky_note'),
+      description: 'Sticky note tool'
+    },
+    // Element actions
+    {
+      key: 'Delete',
+      callback: () => {
+        if (selectedElementIds.length > 0) {
+          selectedElementIds.forEach(id => deleteElement(id))
+          clearSelection()
+        }
+      },
+      description: 'Delete selected elements'
+    },
+    {
+      key: 'Backspace',
+      callback: () => {
+        if (selectedElementIds.length > 0) {
+          selectedElementIds.forEach(id => deleteElement(id))
+          clearSelection()
+        }
+      },
+      description: 'Delete selected elements'
+    },
+    // Selection shortcuts
+    {
+      key: 'Escape',
+      callback: () => {
+        clearSelection()
+        setContextMenu(null)
+        setShowFloatingColorPicker(false)
+        if (activeTool !== 'select') {
+          setActiveTool('select')
+        }
+      },
+      description: 'Clear selection and return to select tool'
+    },
+    {
+      key: 'a',
+      ctrlKey: true,
+      callback: () => {
+        // Select all elements
+        const allElementIds = elements.map(el => el.id)
+        setSelectedElementIds(allElementIds)
+      },
+      description: 'Select all elements',
+      preventDefault: true
+    },
+    // Zoom and navigation
+    {
+      key: '=',
+      ctrlKey: true,
+      callback: () => {
+        const newScale = Math.min(stageScale * 1.2, 5)
+        setStageScale(newScale)
+      },
+      description: 'Zoom in',
+      preventDefault: true
+    },
+    {
+      key: '+',
+      ctrlKey: true,
+      callback: () => {
+        const newScale = Math.min(stageScale * 1.2, 5)
+        setStageScale(newScale)
+      },
+      description: 'Zoom in (plus key)',
+      preventDefault: true
+    },
+    {
+      key: '-',
+      ctrlKey: true,
+      callback: () => {
+        const newScale = Math.max(stageScale / 1.2, 0.1)
+        setStageScale(newScale)
+      },
+      description: 'Zoom out',
+      preventDefault: true
+    },
+    {
+      key: '0',
+      ctrlKey: true,
+      callback: () => {
+        setStageScale(1)
+        setStagePos({ x: 0, y: 0 })
+      },
+      description: 'Reset zoom and position',
+      preventDefault: true
+    },
+    // Task creation
+    {
+      key: 'Enter',
+      ctrlKey: true,
+      callback: () => {
+        if (selectedElementIds.length > 0) {
+          setIsCreateTaskModalOpen(true)
+        }
+      },
+      description: 'Create task from selected elements',
+      preventDefault: true
+    },
+    // Copy, paste, and duplicate shortcuts
+    {
+      key: 'c',
+      ctrlKey: true,
+      callback: () => {
+        if (selectedElementIds.length > 0) {
+          copyElements()
+        }
+      },
+      description: 'Copy selected elements',
+      preventDefault: true
+    },
+    {
+      key: 'v',
+      ctrlKey: true,
+      callback: () => {
+        pasteElements()
+      },
+      description: 'Paste elements',
+      preventDefault: true
+    },
+    {
+      key: 'd',
+      ctrlKey: true,
+      callback: () => {
+        if (selectedElementIds.length > 0) {
+          duplicateElements()
+        }
+      },
+      description: 'Duplicate selected elements',
+      preventDefault: true
+    }
+  ])
 
   useEffect(() => {
     loadElements()
   }, [board.id])
+  
+  // Close floating color picker and context menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (showFloatingColorPicker) {
+        const target = event.target
+        if (target instanceof Element && !target.closest('.floating-color-picker')) {
+          setShowFloatingColorPicker(false)
+        }
+      }
+      if (contextMenu) {
+        const target = event.target
+        if (target instanceof Element && !target.closest('.context-menu')) {
+          setContextMenu(null)
+        }
+      }
+    }
+    
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showFloatingColorPicker, contextMenu])
+  
+  // Show floating color picker when elements are selected
+  useEffect(() => {
+    if (selectedElementIds.length > 0) {
+      setShowFloatingColorPicker(true)
+    } else {
+      setShowFloatingColorPicker(false)
+    }
+  }, [selectedElementIds.length])
 
   async function loadElements() {
     try {
@@ -77,6 +590,14 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   async function createElement(type: string, x: number, y: number, properties: Record<string, unknown> = {}) {
     if (!user) return
 
+    // Get default color for this element type, but use selected color if available
+    const colorKey = selectedColor
+    const defaultColor = ELEMENT_COLORS[colorKey]
+    
+    // Get CSS custom property values
+    const fillColor = getComputedColor(defaultColor.fill)
+    const strokeColor = getComputedColor(defaultColor.stroke)
+
     const newElement = {
       board_id: board.id,
       type,
@@ -86,10 +607,11 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       height: type === 'text' ? 50 : 100,
       rotation: 0,
       properties: {
-        fill: type === 'sticky_note' ? '#fef3c7' : '#3b82f6',
-        stroke: '#1f2937',
+        fill: fillColor || (type === 'sticky_note' ? '#fef3c7' : '#6366f1'),
+        stroke: strokeColor || '#334155',
         strokeWidth: 2,
         text: type === 'text' || type === 'sticky_note' ? 'Double click to edit' : '',
+        colorKey, // Store the theme color key for future reference
         ...properties
       },
       layer_index: elements.length,
@@ -138,12 +660,277 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     }
   }
 
+  async function changeElementColor(elementId: string, colorKey: ElementColorKey) {
+    const colorConfig = ELEMENT_COLORS[colorKey]
+    const fillColor = getComputedColor(colorConfig.fill)
+    const strokeColor = getComputedColor(colorConfig.stroke)
+    
+    const element = elements.find(el => el.id === elementId)
+    if (!element) return
+    
+    const updatedProperties = {
+      ...(element.properties as Record<string, unknown>),
+      fill: fillColor,
+      stroke: strokeColor,
+      colorKey
+    }
+    
+    await updateElementInDB(elementId, { properties: updatedProperties })
+  }
+  
+  async function changeElementToCustomColor(elementId: string, fillColor: string) {
+    // Generate a slightly darker stroke color
+    const strokeColor = adjustColorBrightness(fillColor, -20)
+    
+    const element = elements.find(el => el.id === elementId)
+    if (!element) return
+    
+    const updatedProperties = {
+      ...(element.properties as Record<string, unknown>),
+      fill: fillColor,
+      stroke: strokeColor,
+      colorKey: 'custom' // Mark as custom color
+    }
+    
+    await updateElementInDB(elementId, { properties: updatedProperties })
+  }
+  
+  // Helper function to adjust color brightness
+  function adjustColorBrightness(hex: string, percent: number): string {
+    const num = parseInt(hex.replace('#', ''), 16)
+    const amt = Math.round(2.55 * percent)
+    const R = (num >> 16) + amt
+    const G = (num >> 8 & 0x00FF) + amt
+    const B = (num & 0x0000FF) + amt
+    return '#' + (0x1000000 + (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
+      (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
+      (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1)
+  }
+  
+  // Calculate position for floating color picker (very close to elements)
+  function getFloatingColorPickerPosition() {
+    if (selectedElementIds.length === 0) return { x: 0, y: 0 }
+    
+    const selectedElements = elements.filter(el => selectedElementIds.includes(el.id))
+    if (selectedElements.length === 0) return { x: 0, y: 0 }
+    
+    // Find the bounding box of all selected elements
+    const bounds = selectedElements.reduce((acc, element) => {
+      const x = element.x || 0
+      const y = element.y || 0
+      const width = element.width || 0
+      const height = element.height || 0
+      
+      return {
+        minX: Math.min(acc.minX, x),
+        minY: Math.min(acc.minY, y),
+        maxX: Math.max(acc.maxX, x + width),
+        maxY: Math.max(acc.maxY, y + height)
+      }
+    }, { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity })
+    
+    // Position picker very close above the selection
+    const pickerWidth = 200
+    const pickerHeight = 100
+    const padding = 8 // Much smaller padding for closer positioning
+    
+    // Center horizontally above the selection
+    const centerX = (bounds.minX + bounds.maxX) / 2
+    let x = centerX - pickerWidth / 2
+    let y = bounds.minY - pickerHeight - padding
+    
+    // Convert from canvas coordinates to screen coordinates
+    const screenX = x * stageScale + stagePos.x
+    const screenY = y * stageScale + stagePos.y
+    
+    // Adjust if picker would go off-screen (but keep it close)
+    const viewportWidth = window.innerWidth
+    const minPadding = 8
+    
+    // Horizontal adjustments - stay close to element
+    if (screenX < minPadding) {
+      x = (minPadding - stagePos.x) / stageScale
+    } else if (screenX + pickerWidth > viewportWidth - minPadding) {
+      x = (viewportWidth - pickerWidth - minPadding - stagePos.x) / stageScale
+    }
+    
+    // If not enough space above, position below but very close
+    if (screenY < minPadding) {
+      y = bounds.maxY + padding
+    }
+    
+    // Final screen coordinates
+    const finalScreenX = x * stageScale + stagePos.x
+    const finalScreenY = y * stageScale + stagePos.y
+    
+    return { x: finalScreenX, y: finalScreenY }
+  }
+  
+  // Render floating color picker (compact version)
+  function renderFloatingColorPicker() {
+    if (!showFloatingColorPicker || selectedElementIds.length === 0) return null
+    
+    const position = getFloatingColorPickerPosition()
+    
+    return (
+      <div 
+        className="floating-color-picker fixed z-50 bg-card border border-border rounded-lg shadow-xl p-3 animate-in fade-in zoom-in-95 duration-200"
+        style={{
+          left: `${position.x}px`,
+          top: `${position.y}px`,
+          width: '200px'
+        }}
+      >
+        {/* Primary 4 Colors */}
+        <div className="flex gap-2 mb-3">
+          {PRIMARY_COLORS.map(colorKey => {
+            const config = ELEMENT_COLORS[colorKey]
+            const fillColor = getComputedColor(config.fill)
+            const strokeColor = getComputedColor(config.stroke)
+            const isCurrentColor = selectedElementIds.some(id => {
+              const element = elements.find(el => el.id === id)
+              return element?.properties && (element.properties as Record<string, unknown>).colorKey === colorKey
+            })
+            
+            return (
+              <button
+                key={colorKey}
+                onClick={() => {
+                  selectedElementIds.forEach(id => changeElementColor(id, colorKey))
+                }}
+                className={`relative flex-1 p-2 rounded-lg transition-all duration-200 hover:scale-105 ${
+                  isCurrentColor ? 'ring-2 ring-white scale-105' : 'hover:ring-2 hover:ring-white/50'
+                }`}
+                title={config.name}
+              >
+                <div 
+                  className="w-8 h-8 rounded-full mx-auto transition-all duration-200"
+                  style={{ 
+                    backgroundColor: fillColor,
+                    border: `2px solid ${strokeColor}`
+                  }}
+                />
+                {isCurrentColor && (
+                  <div className="absolute top-1 right-1 w-2 h-2 bg-white rounded-full" />
+                )}
+              </button>
+            )
+          })}
+        </div>
+        
+        {/* Custom Color Picker */}
+        <div className="border-t border-border pt-3">
+          <div className="flex gap-2 items-center">
+            <input
+              type="color"
+              value={customColor}
+              onChange={(e) => {
+                setCustomColor(e.target.value)
+                // Auto-apply custom color when changed
+                selectedElementIds.forEach(id => changeElementToCustomColor(id, e.target.value))
+              }}
+              className="w-8 h-8 rounded border border-border cursor-pointer flex-shrink-0"
+              title="Custom color picker"
+            />
+            <input
+              type="text"
+              value={customColor}
+              onChange={(e) => setCustomColor(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  selectedElementIds.forEach(id => changeElementToCustomColor(id, customColor))
+                }
+              }}
+              placeholder="#ffffff"
+              className="flex-1 px-2 py-1 text-xs border border-border rounded bg-input text-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+              pattern="^#[0-9A-Fa-f]{6}$"
+            />
+          </div>
+          <div className="text-xs text-muted-foreground mt-1 text-center">
+            Pick or type hex color
+          </div>
+        </div>
+      </div>
+    )
+  }
+  
+  // Render context menu
+  function renderContextMenu() {
+    if (!contextMenu) return null
+    
+    const selectedCount = selectedElementIds.length
+    
+    return (
+      <div
+        className="context-menu fixed z-50 bg-card border border-border rounded-lg shadow-xl py-2 animate-in fade-in zoom-in-95 duration-150"
+        style={{
+          left: `${contextMenu.x}px`,
+          top: `${contextMenu.y}px`,
+          minWidth: '160px'
+        }}
+      >
+        <button
+          onClick={() => {
+            setIsCreateTaskModalOpen(true)
+            setContextMenu(null)
+          }}
+          className="w-full flex items-center gap-3 px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+          Create Task{selectedCount > 1 ? ` (${selectedCount})` : ''}
+        </button>
+        
+        <button
+          onClick={() => {
+            duplicateElements()
+            setContextMenu(null)
+          }}
+          className="w-full flex items-center gap-3 px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"
+        >
+          <Copy className="h-4 w-4" />
+          Duplicate{selectedCount > 1 ? ` (${selectedCount})` : ''}
+        </button>
+        
+        <button
+          onClick={() => {
+            // Move to front
+            selectedElementIds.forEach(id => {
+              updateElementInDB(id, { layer_index: elements.length })
+            })
+            setContextMenu(null)
+          }}
+          className="w-full flex items-center gap-3 px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"
+        >
+          <Layers className="h-4 w-4" />
+          Bring to Front
+        </button>
+        
+        <div className="border-t border-border my-1" />
+        
+        <button
+          onClick={() => {
+            selectedElementIds.forEach(id => deleteElement(id))
+            setContextMenu(null)
+            clearSelection()
+          }}
+          className="w-full flex items-center gap-3 px-3 py-2 text-sm text-destructive hover:bg-destructive-50 transition-colors"
+        >
+          <Trash2 className="h-4 w-4" />
+          Delete{selectedCount > 1 ? ` (${selectedCount})` : ''}
+        </button>
+      </div>
+    )
+  }
+
   function handleStageClick(e: Konva.KonvaEventObject<MouseEvent>) {
     const stage = e.target.getStage()
     if (!stage) return
 
     const pos = stage.getPointerPosition()
     if (!pos) return
+
+    // Close context menu on stage click
+    setContextMenu(null)
 
     if (activeTool === 'select') {
       // If clicking on empty space, clear selection
@@ -160,6 +947,9 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   function handleElementClick(elementId: string, e: Konva.KonvaEventObject<MouseEvent>) {
     e.cancelBubble = true
     
+    // Close context menu on regular click
+    setContextMenu(null)
+    
     if (activeTool === 'select') {
       if (e.evt.shiftKey) {
         toggleElementSelection(elementId)
@@ -167,6 +957,33 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
         setSelectedElementIds([elementId])
       }
     }
+  }
+  
+  function handleElementRightClick(elementId: string, e: Konva.KonvaEventObject<MouseEvent>) {
+    e.cancelBubble = true
+    e.evt.preventDefault()
+    
+    // Select the element if not already selected
+    if (!selectedElementIds.includes(elementId)) {
+      setSelectedElementIds([elementId])
+    }
+    
+    // Get the mouse position relative to the stage
+    const stage = e.target.getStage()
+    if (!stage) return
+    
+    const pointerPosition = stage.getPointerPosition()
+    if (!pointerPosition) return
+    
+    // Convert to screen coordinates
+    const screenX = pointerPosition.x * stageScale + stagePos.x
+    const screenY = pointerPosition.y * stageScale + stagePos.y
+    
+    setContextMenu({
+      x: screenX,
+      y: screenY,
+      elementId
+    })
   }
 
   function handleElementDrag(elementId: string, newAttrs: { x: number; y: number }) {
@@ -334,20 +1151,43 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       onClick: (e: Konva.KonvaEventObject<MouseEvent>) => handleElementClick(element.id, e),
       onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => handleElementDrag(element.id, e.target.attrs),
       onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => handleElementDragEnd(element.id, e.target.attrs),
-      stroke: isSelected ? '#ef4444' : (props.stroke as string),
-      strokeWidth: isSelected ? 2 : (props.strokeWidth as number) || 1
+      onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>) => handleElementRightClick(element.id, e),
+      stroke: isSelected ? 'var(--color-destructive-500)' : (props.stroke as string),
+      strokeWidth: isSelected ? 3 : (props.strokeWidth as number) || 2
     }
 
     switch (element.type) {
       case 'rectangle':
-      case 'sticky_note':
         return (
           <Rect
             key={element.id}
             {...baseProps}
             fill={props.fill as string}
-            cornerRadius={element.type === 'sticky_note' ? 6 : 0}
+            cornerRadius={3}
           />
+        )
+      case 'sticky_note':
+        return (
+          <React.Fragment key={element.id}>
+            <Rect
+              {...baseProps}
+              fill={props.fill as string}
+              cornerRadius={8}
+            />
+            <Text
+              {...baseProps}
+              text={(props.text as string) || 'Double click to edit'}
+              fontSize={(props.fontSize as number) || 14}
+              fill={(props.textColor as string) || 'var(--color-gray-800)'}
+              align="center"
+              verticalAlign="middle"
+              fontFamily="var(--font-sans)"
+              padding={8}
+              onDblClick={() => {
+                setEditingElement({ id: element.id, text: (props.text as string) || '' })
+              }}
+            />
+          </React.Fragment>
         )
       case 'circle':
         return (
@@ -359,16 +1199,16 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
           />
         )
       case 'text':
-      case 'sticky_note':
         return (
           <Text
             key={element.id}
             {...baseProps}
             text={(props.text as string) || 'Text'}
-            fontSize={(props.fontSize as number) || 14}
-            fill={(props.textColor as string) || '#000000'}
+            fontSize={(props.fontSize as number) || 16}
+            fill={(props.textColor as string) || (props.fill as string) || 'var(--color-foreground)'}
             align="center"
             verticalAlign="middle"
+            fontFamily="var(--font-sans)"
             onDblClick={() => {
               setEditingElement({ id: element.id, text: (props.text as string) || '' })
             }}
@@ -404,29 +1244,49 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       {/* Toolbar */}
       <div className="bg-card border-b border-border p-3 flex items-center justify-between">
         <div className="flex items-center gap-1">
-          {tools.map(({ type, icon: Icon, label }) => (
-            <button
-              key={type}
-              onClick={() => setActiveTool(type)}
-              className={`p-2 rounded-md transition-colors ${
-                activeTool === type
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-              }`}
-              title={label}
-            >
-              <Icon className="h-4 w-4" />
-            </button>
-          ))}
+          {tools.map(({ type, icon: Icon, label }) => {
+            // Map tools to their keyboard shortcuts
+            const shortcutMap: Record<string, string> = {
+              select: 'V',
+              rectangle: 'R',
+              circle: 'C',
+              text: 'T',
+              arrow: 'A',
+              sticky_note: 'S'
+            }
+            
+            // Detect platform for correct modifier key display
+            const isMac = typeof navigator !== 'undefined' && 
+                         (navigator.userAgent.includes('Mac') || navigator.userAgent.includes('iPhone') || navigator.userAgent.includes('iPad'))
+            const modifierKey = isMac ? '⌘' : 'Ctrl'
+            
+            return (
+              <button
+                key={type}
+                onClick={() => handleToolChange(type)}
+                className={`p-2 rounded-md transition-all duration-200 ${
+                  activeTool === type
+                    ? 'bg-primary text-primary-foreground shadow-md scale-105'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground hover:scale-105'
+                }`}
+                title={`${label} (${shortcutMap[type]}) • ${modifierKey}+C: Copy • ${modifierKey}+V: Paste • ${modifierKey}+D: Duplicate • Del: Delete`}
+              >
+                <Icon className="h-4 w-4" />
+              </button>
+            )
+          })}
         </div>
 
         {selectedElementIds.length > 0 && (
           <div className="flex items-center gap-2">
+            <div className="text-sm text-muted-foreground">
+              {selectedElementIds.length} selected
+            </div>
             <button
               onClick={() => setIsCreateTaskModalOpen(true)}
               className="px-3 py-2 bg-success-600 text-success-50 rounded-md hover:bg-success-700 transition-colors text-sm font-medium"
             >
-              Create Task ({selectedElementIds.length})
+              Create Task
             </button>
             <button
               onClick={() => {
@@ -460,7 +1320,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
             {/* Dot Grid Pattern like Whimsical */}
             {(() => {
               // Adaptive dot spacing based on zoom level
-              let baseDotSpacing = 20
+              const baseDotSpacing = 20
               let currentDotSpacing = baseDotSpacing
               let dotLevel = 0
               
@@ -539,6 +1399,12 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
         </Stage>
       </div>
 
+      {/* Floating Color Picker */}
+      {renderFloatingColorPicker()}
+      
+      {/* Context Menu */}
+      {renderContextMenu()}
+      
       {/* Create Task Modal */}
       <CreateTaskModal
         isOpen={isCreateTaskModalOpen}
