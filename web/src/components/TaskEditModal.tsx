@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Calendar, User, Flag } from 'lucide-react'
+import { Calendar, User, Flag } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
-import { useAppStore } from '@/store'
 import { Database } from '@/types/database.types'
+import Modal from './Modal'
 
 type Tables = Database['public']['Tables']
 type Task = Tables['tasks']['Row']
@@ -17,7 +17,7 @@ interface TaskEditModalProps {
 }
 
 export default function TaskEditModal({ isOpen, onClose, onSave, task }: TaskEditModalProps) {
-  const { userProfiles } = useAppStore()
+  const supabase = createClient()
   
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -25,6 +25,7 @@ export default function TaskEditModal({ isOpen, onClose, onSave, task }: TaskEdi
   const [assigneeId, setAssigneeId] = useState<string | null>(null)
   const [priority, setPriority] = useState<string>('medium')
   const [loading, setLoading] = useState(false)
+  const [userProfiles, setUserProfiles] = useState<Array<{ id: string; full_name: string }>>([])
 
   useEffect(() => {
     if (task) {
@@ -35,6 +36,31 @@ export default function TaskEditModal({ isOpen, onClose, onSave, task }: TaskEdi
       setPriority(task.priority || 'medium')
     }
   }, [task])
+
+  useEffect(() => {
+    async function loadUserProfiles() {
+      try {
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .select('user_id, full_name')
+          .order('full_name')
+        
+        if (error) throw error
+        
+        setUserProfiles(data?.map(profile => ({ 
+          id: profile.user_id, 
+          full_name: profile.full_name || 'Unknown User' 
+        })) || [])
+      } catch (error) {
+        console.error('Error loading user profiles:', error)
+        setUserProfiles([])
+      }
+    }
+
+    if (isOpen) {
+      loadUserProfiles()
+    }
+  }, [isOpen, supabase])
 
   if (!isOpen || !task) return null
 
@@ -57,21 +83,15 @@ export default function TaskEditModal({ isOpen, onClose, onSave, task }: TaskEdi
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-in fade-in duration-fast">
-      <div className="bg-card rounded-lg shadow-lg max-w-md w-full mx-4 animate-in zoom-in-95 duration-fast">
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <h3 className="text-lg font-semibold text-foreground">Edit Task</h3>
-          <button
-            onClick={onClose}
-            className="p-1 hover:bg-accent rounded transition-colors"
-          >
-            <X className="h-4 w-4 text-muted-foreground" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Edit Task"
+      size="sm"
+    >
+      <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
-            <label htmlFor="title" className="block text-sm font-medium text-foreground mb-1">
+            <label htmlFor="title" className="block text-sm font-medium text-[var(--color-card-foreground)] mb-2">
               Title *
             </label>
             <input
@@ -79,14 +99,14 @@ export default function TaskEditModal({ isOpen, onClose, onSave, task }: TaskEdi
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+              className="w-full px-3 py-2 bg-[var(--color-input)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:ring-2 focus:ring-[var(--color-ring)] focus:border-transparent text-sm placeholder:text-[var(--color-muted-foreground)]"
               placeholder="Enter task title"
               required
             />
           </div>
 
           <div>
-            <label htmlFor="description" className="block text-sm font-medium text-foreground mb-1">
+            <label htmlFor="description" className="block text-sm font-medium text-[var(--color-card-foreground)] mb-2">
               Description
             </label>
             <textarea
@@ -94,39 +114,39 @@ export default function TaskEditModal({ isOpen, onClose, onSave, task }: TaskEdi
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary resize-none"
+              className="w-full px-3 py-2 bg-[var(--color-input)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:ring-2 focus:ring-[var(--color-ring)] focus:border-transparent text-sm placeholder:text-[var(--color-muted-foreground)] resize-none"
               placeholder="Add a description (optional)"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label htmlFor="dueDate" className="block text-sm font-medium text-foreground mb-1">
+              <label htmlFor="dueDate" className="block text-sm font-medium text-[var(--color-card-foreground)] mb-2">
                 Due Date
               </label>
               <div className="relative">
-                <Calendar className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Calendar className="absolute left-2 top-2.5 h-4 w-4 text-[var(--color-muted-foreground)]" />
                 <input
                   id="dueDate"
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full pl-8 pr-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+                  className="w-full pl-8 pr-3 py-2 bg-[var(--color-input)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:ring-2 focus:ring-[var(--color-ring)] focus:border-transparent text-sm"
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="priority" className="block text-sm font-medium text-foreground mb-1">
+              <label htmlFor="priority" className="block text-sm font-medium text-[var(--color-card-foreground)] mb-2">
                 Priority
               </label>
               <div className="relative">
-                <Flag className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Flag className="absolute left-2 top-2.5 h-4 w-4 text-[var(--color-muted-foreground)]" />
                 <select
                   id="priority"
                   value={priority}
                   onChange={(e) => setPriority(e.target.value)}
-                  className="w-full pl-8 pr-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary appearance-none"
+                  className="w-full pl-8 pr-3 py-2 bg-[var(--color-input)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:ring-2 focus:ring-[var(--color-ring)] focus:border-transparent text-sm appearance-none cursor-pointer"
                 >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
@@ -137,16 +157,16 @@ export default function TaskEditModal({ isOpen, onClose, onSave, task }: TaskEdi
           </div>
 
           <div>
-            <label htmlFor="assignee" className="block text-sm font-medium text-foreground mb-1">
+            <label htmlFor="assignee" className="block text-sm font-medium text-[var(--color-card-foreground)] mb-2">
               Assignee
             </label>
             <div className="relative">
-              <User className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <User className="absolute left-2 top-2.5 h-4 w-4 text-[var(--color-muted-foreground)]" />
               <select
                 id="assignee"
                 value={assigneeId || ''}
                 onChange={(e) => setAssigneeId(e.target.value || null)}
-                className="w-full pl-8 pr-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary appearance-none"
+                className="w-full pl-8 pr-3 py-2 bg-[var(--color-input)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:ring-2 focus:ring-[var(--color-ring)] focus:border-transparent text-sm appearance-none cursor-pointer"
               >
                 <option value="">Unassigned</option>
                 {userProfiles.map((profile) => (
@@ -158,24 +178,23 @@ export default function TaskEditModal({ isOpen, onClose, onSave, task }: TaskEdi
             </div>
           </div>
 
-          <div className="flex gap-2 justify-end pt-2">
+          <div className="flex gap-3 justify-end pt-4 border-t border-[var(--color-border)]">
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-accent rounded-md transition-colors"
+              className="px-4 py-2 text-[var(--color-muted-foreground)] hover:text-[var(--color-card-foreground)] transition-colors duration-[var(--duration-fast)]"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading || !title.trim()}
-              className="px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-[var(--color-primary)] text-[var(--color-primary-foreground)] rounded-[var(--radius-md)] hover:bg-[var(--color-primary-600)] transition-colors duration-[var(--duration-fast)] disabled:opacity-50 disabled:cursor-not-allowed font-medium"
             >
               {loading ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   )
 }
