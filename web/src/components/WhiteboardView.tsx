@@ -1,6 +1,13 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
+
+// Extend Window interface for zoom timeout
+declare global {
+  interface Window {
+    zoomTimeout?: NodeJS.Timeout
+  }
+}
 import { Stage, Layer, Rect, Circle, Text, Arrow } from 'react-konva'
 import Konva from 'konva'
 import { 
@@ -276,6 +283,17 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   const [customColor, setCustomColor] = useState('#6366f1')
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; elementId: string } | null>(null)
   const [clipboard, setClipboard] = useState<Element[]>([])
+  const [resizeState, setResizeState] = useState<{
+    isResizing: boolean;
+    elementId: string | null;
+    handleType: string | null;
+    startPointer: { x: number; y: number } | null;
+    originalBounds: { x: number; y: number; width: number; height: number } | null;
+  }>({ isResizing: false, elementId: null, handleType: null, startPointer: null, originalBounds: null })
+  const [showComingSoonModal, setShowComingSoonModal] = useState(false)
+  
+  // Zoom state for better control
+  const [isZooming, setIsZooming] = useState(false)
 
   // Auto-select appropriate color when switching tools
   const handleToolChange = (toolType: ToolType) => {
@@ -554,6 +572,35 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [contextMenu])
+
+  // Keyboard shortcuts for zoom
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
+        if (event.key === '=' || event.key === '+') {
+          event.preventDefault()
+          // Zoom in - more noticeable steps
+          const currentScale = stageScale
+          const newScale = Math.min(5.0, currentScale * 1.5) // 50% zoom in
+          setStageScale(newScale)
+        } else if (event.key === '-') {
+          event.preventDefault()
+          // Zoom out - more noticeable steps  
+          const currentScale = stageScale
+          const newScale = Math.max(0.1, currentScale / 1.5) // 33% zoom out
+          setStageScale(newScale)
+        } else if (event.key === '0') {
+          event.preventDefault()
+          // Reset zoom to 100%
+          setStageScale(1)
+          setStagePos({ x: 0, y: 0 })
+        }
+      }
+    }
+    
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [stageScale])
 
   async function loadElements() {
     try {
@@ -837,40 +884,199 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     const stage = stageRef.current
     if (!stage) return
 
-    const scaleBy = 1.02
-    const oldScale = stage.scaleX()
-    const mousePointTo = {
-      x: stage.getPointerPosition()!.x / oldScale - stage.x() / oldScale,
-      y: stage.getPointerPosition()!.y / oldScale - stage.y() / oldScale
-    }
-
-    const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy
+    // Set zooming state for UI feedback
+    setIsZooming(true)
     
+    // Clear any existing zoom timeout
+    if (window.zoomTimeout) {
+      clearTimeout(window.zoomTimeout)
+    }
+    
+    // Reset zooming state after a delay
+    window.zoomTimeout = setTimeout(() => {
+      setIsZooming(false)
+    }, 150)
+
+    // Zoom limits for better UX
+    const minScale = 0.1  // 10% minimum zoom
+    const maxScale = 5.0  // 500% maximum zoom
+    
+    // Improved scaling with better sensitivity and device detection
+    const deltaY = e.evt.deltaY
+    
+    // Different sensitivity for different scroll types
+    // Most trackpads send smaller deltaY values, mice send larger ones
+    let sensitivity = 0.01 // Increased base sensitivity for more noticeable zoom
+    
+    // Detect trackpad vs mouse wheel based on deltaY magnitude
+    if (Math.abs(deltaY) > 100) {
+      // Likely a mouse wheel - use higher sensitivity for more responsive feel
+      sensitivity = 0.015
+    } else {
+      // Likely a trackpad - moderate sensitivity for good control
+      sensitivity = 0.008
+    }
+    
+    // Calculate zoom factor based on scroll amount
+    let zoomFactor = 1 - (deltaY * sensitivity)
+    
+    // Wider zoom factor range for more noticeable steps
+    zoomFactor = Math.max(0.8, Math.min(1.25, zoomFactor))
+    
+    const oldScale = stage.scaleX()
+    let newScale = oldScale * zoomFactor
+    
+    // Apply zoom limits
+    newScale = Math.max(minScale, Math.min(maxScale, newScale))
+    
+    // If we're at the limits, don't zoom
+    if (newScale === oldScale) return
+    
+    // Calculate mouse position for zoom-to-mouse behavior
+    const pointer = stage.getPointerPosition()
+    if (!pointer) return
+    
+    const mousePointTo = {
+      x: pointer.x / oldScale - stage.x() / oldScale,
+      y: pointer.y / oldScale - stage.y() / oldScale
+    }
+    
+    // Update scale and position for smooth zoom-to-mouse
     setStageScale(newScale)
     setStagePos({
-      x: -(mousePointTo.x - stage.getPointerPosition()!.x / newScale) * newScale,
-      y: -(mousePointTo.y - stage.getPointerPosition()!.y / newScale) * newScale
+      x: -(mousePointTo.x - pointer.x / newScale) * newScale,
+      y: -(mousePointTo.y - pointer.y / newScale) * newScale
     })
   }
 
-  function handleElementResize(elementId: string, newSize: { width: number; height: number }) {
-    updateElementInDB(elementId, newSize)
+  function handleStageMouseMove() {
+    const stage = stageRef.current
+    if (!stage || !resizeState.isResizing) return
+    
+    const pointer = stage.getPointerPosition()
+    if (!pointer || !resizeState.startPointer || !resizeState.originalBounds || !resizeState.elementId) return
+    
+    // Calculate offset from original drag start position
+    const deltaX = pointer.x - resizeState.startPointer.x
+    const deltaY = pointer.y - resizeState.startPointer.y
+    
+    const { x: origX, y: origY, width: origWidth, height: origHeight } = resizeState.originalBounds
+    
+    
+    // Calculate new dimensions and position based on handle type and delta
+    let newAttrs: Partial<WhiteboardElement> = {}
+    
+    switch (resizeState.handleType) {
+      case 'se': // Bottom-right corner
+        newAttrs = {
+          width: Math.max(20, origWidth + deltaX),
+          height: Math.max(20, origHeight + deltaY)
+        }
+        break
+      case 'nw': // Top-left corner
+        const nwNewWidth = Math.max(20, origWidth - deltaX)
+        const nwNewHeight = Math.max(20, origHeight - deltaY)
+        newAttrs = {
+          x: origX + (origWidth - nwNewWidth),
+          y: origY + (origHeight - nwNewHeight),
+          width: nwNewWidth,
+          height: nwNewHeight
+        }
+        break
+      case 'ne': // Top-right corner
+        const neNewHeight = Math.max(20, origHeight - deltaY)
+        newAttrs = {
+          y: origY + (origHeight - neNewHeight),
+          width: Math.max(20, origWidth + deltaX),
+          height: neNewHeight
+        }
+        break
+      case 'sw': // Bottom-left corner
+        const swNewWidth = Math.max(20, origWidth - deltaX)
+        newAttrs = {
+          x: origX + (origWidth - swNewWidth),
+          width: swNewWidth,
+          height: Math.max(20, origHeight + deltaY)
+        }
+        break
+      case 'e': // Right side
+        newAttrs = { width: Math.max(20, origWidth + deltaX) }
+        break
+      case 'w': // Left side
+        const wNewWidth = Math.max(20, origWidth - deltaX)
+        newAttrs = {
+          x: origX + (origWidth - wNewWidth),
+          width: wNewWidth
+        }
+        break
+      case 's': // Bottom side
+        newAttrs = { height: Math.max(20, origHeight + deltaY) }
+        break
+      case 'n': // Top side
+        const nNewHeight = Math.max(20, origHeight - deltaY)
+        newAttrs = {
+          y: origY + (origHeight - nNewHeight),
+          height: nNewHeight
+        }
+        break
+    }
+    
+    
+    // Update element locally for smooth interaction
+    updateElement(resizeState.elementId, newAttrs)
   }
 
+  function handleStageMouseUp() {
+    if (!resizeState.isResizing) return
+    
+    
+    const elementId = resizeState.elementId
+    
+    // Reset resize state
+    setResizeState({ 
+      isResizing: false, 
+      elementId: null, 
+      handleType: null, 
+      startPointer: null, 
+      originalBounds: null 
+    })
+    
+    // Persist changes to database only after resize ends
+    if (elementId) {
+      const currentElement = elements.find(el => el.id === elementId)
+      if (currentElement) {
+        updateElementInDB(elementId, {
+          x: currentElement.x,
+          y: currentElement.y,
+          width: currentElement.width,
+          height: currentElement.height
+        })
+      }
+    }
+  }
+
+
+
   function renderResizeHandles(element: WhiteboardElement) {
+    // Don't show resize handles for circles - not supported yet
+    if (element.type === 'circle') {
+      return []
+    }
+
     const handleSize = 8 / stageScale // Scale handle size with zoom
     const x = element.x || 0
     const y = element.y || 0
     const width = element.width || 0
     const height = element.height || 0
     
+    // For rectangles and other shapes, use rectangular bounding box
     const handles = [
-      // Corner handles
+      // Corner handles - positioned at exact corners
       { x: x - handleSize/2, y: y - handleSize/2, cursor: 'nw-resize', type: 'nw' },
       { x: x + width - handleSize/2, y: y - handleSize/2, cursor: 'ne-resize', type: 'ne' },
       { x: x - handleSize/2, y: y + height - handleSize/2, cursor: 'sw-resize', type: 'sw' },
       { x: x + width - handleSize/2, y: y + height - handleSize/2, cursor: 'se-resize', type: 'se' },
-      // Side handles
+      // Side handles - positioned at midpoints
       { x: x + width/2 - handleSize/2, y: y - handleSize/2, cursor: 'n-resize', type: 'n' },
       { x: x + width/2 - handleSize/2, y: y + height - handleSize/2, cursor: 's-resize', type: 's' },
       { x: x - handleSize/2, y: y + height/2 - handleSize/2, cursor: 'w-resize', type: 'w' },
@@ -887,88 +1093,28 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
         fill="#ffffff"
         stroke="#2563eb"
         strokeWidth={1.5 / stageScale}
-        draggable={true}
-        onDragMove={() => {
+        draggable={false}
+        onMouseDown={(e) => {
           const stage = stageRef.current
           if (!stage) return
           
           const pointer = stage.getPointerPosition()
           if (!pointer) return
           
-          const newWidth = element.width || 0
-          const newHeight = element.height || 0
+          // Prevent event bubbling
+          e.cancelBubble = true
+          e.evt.preventDefault()
+          e.evt.stopPropagation()
           
-          // Calculate new dimensions based on handle type
-          let updatedSize = { width: newWidth, height: newHeight }
+          // Store initial state for proper offset calculation
+          setResizeState({
+            isResizing: true,
+            elementId: element.id,
+            handleType: handle.type,
+            startPointer: { x: pointer.x, y: pointer.y },
+            originalBounds: { x: element.x || 0, y: element.y || 0, width: element.width || 0, height: element.height || 0 }
+          })
           
-          switch (handle.type) {
-            case 'se': // Bottom-right corner
-              updatedSize = {
-                width: Math.max(20, pointer.x - x),
-                height: Math.max(20, pointer.y - y)
-              }
-              break
-            case 'nw': // Top-left corner
-              updatedSize = {
-                width: Math.max(20, (x + newWidth) - pointer.x),
-                height: Math.max(20, (y + newHeight) - pointer.y)
-              }
-              // Also need to update position
-              updateElementInDB(element.id, { 
-                x: pointer.x, 
-                y: pointer.y,
-                ...updatedSize 
-              })
-              return
-            case 'ne': // Top-right corner
-              updatedSize = {
-                width: Math.max(20, pointer.x - x),
-                height: Math.max(20, (y + newHeight) - pointer.y)
-              }
-              updateElementInDB(element.id, { 
-                y: pointer.y,
-                ...updatedSize 
-              })
-              return
-            case 'sw': // Bottom-left corner
-              updatedSize = {
-                width: Math.max(20, (x + newWidth) - pointer.x),
-                height: Math.max(20, pointer.y - y)
-              }
-              updateElementInDB(element.id, { 
-                x: pointer.x,
-                ...updatedSize 
-              })
-              return
-            case 'e': // Right side
-              updatedSize = { width: Math.max(20, pointer.x - x), height: newHeight }
-              break
-            case 'w': // Left side
-              updatedSize = { 
-                width: Math.max(20, (x + newWidth) - pointer.x), 
-                height: newHeight 
-              }
-              updateElementInDB(element.id, { 
-                x: pointer.x,
-                ...updatedSize 
-              })
-              return
-            case 's': // Bottom side
-              updatedSize = { width: newWidth, height: Math.max(20, pointer.y - y) }
-              break
-            case 'n': // Top side
-              updatedSize = { 
-                width: newWidth, 
-                height: Math.max(20, (y + newHeight) - pointer.y) 
-              }
-              updateElementInDB(element.id, { 
-                y: pointer.y,
-                ...updatedSize 
-              })
-              return
-          }
-          
-          handleElementResize(element.id, updatedSize)
         }}
       />
     ))
@@ -1033,6 +1179,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
             {...baseProps}
             radius={(element.width || 0) / 2}
             fill={props.fill as string}
+            onDblClick={() => setShowComingSoonModal(true)}
           />
         )
       case 'text':
@@ -1223,6 +1370,19 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
             <h3 className="text-sm font-medium text-foreground mb-3">
               Selection ({selectedElementIds.length})
             </h3>
+            
+            {/* Circle resizing notice */}
+            {selectedElementIds.some(id => {
+              const element = elements.find(el => el.id === id)
+              return element?.type === 'circle'
+            }) && (
+              <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-md">
+                <p className="text-xs text-amber-800">
+                  💡 Circle resizing is coming soon! Double-click to learn more.
+                </p>
+              </div>
+            )}
+            
             <div className="space-y-2">
               <button
                 onClick={() => setIsCreateTaskModalOpen(true)}
@@ -1270,7 +1430,14 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
           <div className="text-sm text-muted-foreground">
             {board.name} - Whiteboard
           </div>
-          <div className="text-xs text-muted-foreground">
+          <div 
+            className={`text-xs transition-all duration-200 ${
+              isZooming 
+                ? 'text-primary font-medium scale-110' 
+                : 'text-muted-foreground'
+            }`}
+            title="Use mouse wheel to zoom, or Ctrl+Plus/Minus/0"
+          >
             Zoom: {Math.round(stageScale * 100)}%
           </div>
         </div>
@@ -1287,7 +1454,9 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
           y={stagePos.y}
           onWheel={handleWheel}
           onClick={handleStageClick}
-          draggable={activeTool === 'select'}
+          onMouseMove={handleStageMouseMove}
+          onMouseUp={handleStageMouseUp}
+          draggable={activeTool === 'select' && !resizeState.isResizing}
         >
           <Layer>
             {/* Dot Grid Pattern like Whimsical */}
@@ -1406,6 +1575,31 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
         submitText="Update"
         type="textarea"
       />
+
+      {/* Coming Soon Modal for Circle Resizing */}
+      {showComingSoonModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card border border-border rounded-lg p-6 max-w-sm mx-4 shadow-lg">
+            <div className="text-center">
+              <div className="w-12 h-12 mx-auto mb-4 bg-primary/10 rounded-full flex items-center justify-center">
+                <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Circle Resizing</h3>
+              <p className="text-muted-foreground mb-6">
+                Circle resizing is coming soon! We&apos;re working on making it perfect for you.
+              </p>
+              <button
+                onClick={() => setShowComingSoonModal(false)}
+                className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
