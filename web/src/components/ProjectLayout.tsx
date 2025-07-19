@@ -126,20 +126,20 @@ export default function ProjectLayout({ projectId }: ProjectLayoutProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-lg text-gray-600">Loading project...</div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-base text-muted-foreground">Loading project...</div>
       </div>
     )
   }
 
   if (!currentProject) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-xl font-semibold text-gray-900 mb-2">Project not found</h1>
+          <h1 className="text-lg font-medium text-foreground mb-2">Project not found</h1>
           <button
             onClick={() => router.push('/')}
-            className="text-blue-600 hover:text-blue-700"
+            className="text-primary hover:text-primary/80 transition-colors"
           >
             Back to Dashboard
           </button>
@@ -149,37 +149,37 @@ export default function ProjectLayout({ projectId }: ProjectLayoutProps) {
   }
 
   return (
-    <div className="h-screen bg-white flex flex-col">
+    <div className="h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="border-b border-gray-200 px-6 py-4 flex-shrink-0">
+      <header className="border-b border-border px-5 py-3 flex-shrink-0 bg-card">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
               onClick={() => router.push('/')}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 hover:bg-accent rounded-md transition-colors"
             >
-              <ArrowLeft className="h-5 w-5 text-gray-600" />
+              <ArrowLeft className="h-4 w-4 text-muted-foreground" />
             </button>
             <div>
-              <h1 className="text-xl font-semibold text-gray-900">{currentProject.name}</h1>
-              <p className="text-sm text-gray-600">{currentProject.description}</p>
+              <h1 className="text-lg font-semibold text-foreground">{currentProject.name}</h1>
+              <p className="text-sm text-muted-foreground">{currentProject.description}</p>
             </div>
           </div>
           
           <div className="flex items-center gap-2">
-            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-              <Users className="h-5 w-5 text-gray-600" />
+            <button className="p-2 hover:bg-accent rounded-md transition-colors">
+              <Users className="h-4 w-4 text-muted-foreground" />
             </button>
-            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-              <Settings className="h-5 w-5 text-gray-600" />
+            <button className="p-2 hover:bg-accent rounded-md transition-colors">
+              <Settings className="h-4 w-4 text-muted-foreground" />
             </button>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex items-center gap-6 mt-4">
+        <div className="flex items-center gap-5 mt-3">
           {/* Whiteboard tabs */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             {whiteboards.map((board) => (
               <button
                 key={board.id}
@@ -187,10 +187,10 @@ export default function ProjectLayout({ projectId }: ProjectLayoutProps) {
                   setCurrentBoard(board)
                   setActiveTab('whiteboard')
                 }}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-2 py-1 rounded-md text-sm font-medium transition-colors ${
                   currentBoard?.id === board.id && activeTab === 'whiteboard'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 }`}
               >
                 {board.name}
@@ -198,24 +198,24 @@ export default function ProjectLayout({ projectId }: ProjectLayoutProps) {
             ))}
             <button
               onClick={createWhiteboard}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-1 hover:bg-accent rounded-md transition-colors"
               title="Add Whiteboard"
             >
-              <Plus className="h-4 w-4 text-gray-600" />
+              <Plus className="h-4 w-4 text-muted-foreground" />
             </button>
           </div>
 
           {/* Task board tab */}
-          <div className="border-l border-gray-200 pl-6">
+          <div className="border-l border-border pl-5">
             <button
               onClick={() => {
                 setActiveTab('tasks')
                 if (taskBoard) setCurrentBoard(taskBoard)
               }}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-2 py-1 rounded-md text-sm font-medium transition-colors ${
                 activeTab === 'tasks'
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               }`}
             >
               Tasks

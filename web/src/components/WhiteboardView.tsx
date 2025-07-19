@@ -10,9 +10,7 @@ import {
   ArrowRight, 
   StickyNote, 
   MousePointer, 
-  Trash2,
-  Copy,
-  Edit3
+  Trash2
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
@@ -50,7 +48,6 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   } = useAppStore()
 
   const [activeTool, setActiveTool] = useState<ToolType>('select')
-  const [isDrawing, setIsDrawing] = useState(false)
   const [stageScale, setStageScale] = useState(1)
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 })
 
@@ -73,7 +70,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     }
   }
 
-  async function createElement(type: string, x: number, y: number, properties: any = {}) {
+  async function createElement(type: string, x: number, y: number, properties: Record<string, any> = {}) {
     if (!user) return
 
     const newElement = {
@@ -92,7 +89,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
         ...properties
       },
       layer_index: elements.length,
-      created_by: user.id
+      created_by: (user as { id: string } | null)?.id || ''
     }
 
     try {
@@ -149,7 +146,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       if (e.target === stage) {
         clearSelection()
       }
-    } else if (activeTool !== 'select') {
+    } else {
       // Create new element
       createElement(activeTool, pos.x, pos.y)
       setActiveTool('select')
@@ -168,11 +165,11 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     }
   }
 
-  function handleElementDrag(elementId: string, newAttrs: any) {
+  function handleElementDrag(elementId: string, newAttrs: { x: number; y: number }) {
     updateElement(elementId, { x: newAttrs.x, y: newAttrs.y })
   }
 
-  function handleElementDragEnd(elementId: string, newAttrs: any) {
+  function handleElementDragEnd(elementId: string, newAttrs: { x: number; y: number }) {
     updateElementInDB(elementId, { x: newAttrs.x, y: newAttrs.y })
   }
 
@@ -200,21 +197,21 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
 
   function renderElement(element: WhiteboardElement) {
     const isSelected = selectedElementIds.includes(element.id)
-    const props = element.properties as any
+    const props = element.properties as Record<string, any>
 
     const baseProps = {
       key: element.id,
-      x: element.x,
-      y: element.y,
-      width: element.width,
-      height: element.height,
-      rotation: element.rotation,
+      x: element.x || 0,
+      y: element.y || 0,
+      width: element.width || 0,
+      height: element.height || 0,
+      rotation: element.rotation || 0,
       draggable: activeTool === 'select',
-      onClick: (e: any) => handleElementClick(element.id, e),
-      onDragMove: (e: any) => handleElementDrag(element.id, e.target.attrs),
-      onDragEnd: (e: any) => handleElementDragEnd(element.id, e.target.attrs),
+      onClick: (e: Konva.KonvaEventObject<MouseEvent>) => handleElementClick(element.id, e),
+      onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => handleElementDrag(element.id, e.target.attrs),
+      onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => handleElementDragEnd(element.id, e.target.attrs),
       stroke: isSelected ? '#ef4444' : props.stroke,
-      strokeWidth: isSelected ? 3 : props.strokeWidth || 2
+      strokeWidth: isSelected ? 2 : props.strokeWidth || 1
     }
 
     switch (element.type) {
@@ -224,14 +221,14 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
           <Rect
             {...baseProps}
             fill={props.fill}
-            cornerRadius={element.type === 'sticky_note' ? 8 : 0}
+            cornerRadius={element.type === 'sticky_note' ? 6 : 0}
           />
         )
       case 'circle':
         return (
           <Circle
             {...baseProps}
-            radius={element.width / 2}
+            radius={(element.width || 0) / 2}
             fill={props.fill}
           />
         )
@@ -241,7 +238,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
           <Text
             {...baseProps}
             text={props.text || 'Text'}
-            fontSize={props.fontSize || 16}
+            fontSize={props.fontSize || 14}
             fill={props.textColor || '#000000'}
             align="center"
             verticalAlign="middle"
@@ -259,10 +256,10 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
         return (
           <Arrow
             {...baseProps}
-            points={[0, 0, element.width, element.height]}
+            points={[0, 0, element.width || 0, element.height || 0]}
             fill={props.fill}
-            pointerLength={10}
-            pointerWidth={10}
+            pointerLength={8}
+            pointerWidth={8}
           />
         )
       default:
@@ -280,22 +277,22 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   ] as const
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
+    <div className="h-full flex flex-col bg-background">
       {/* Toolbar */}
-      <div className="bg-white border-b border-gray-200 p-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="bg-card border-b border-border p-3 flex items-center justify-between">
+        <div className="flex items-center gap-1">
           {tools.map(({ type, icon: Icon, label }) => (
             <button
               key={type}
               onClick={() => setActiveTool(type)}
-              className={`p-2 rounded-lg transition-colors ${
+              className={`p-2 rounded-md transition-colors ${
                 activeTool === type
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'text-gray-600 hover:bg-gray-100'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
               }`}
               title={label}
             >
-              <Icon className="h-5 w-5" />
+              <Icon className="h-4 w-4" />
             </button>
           ))}
         </div>
@@ -304,7 +301,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsCreateTaskModalOpen(true)}
-              className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+              className="px-3 py-2 bg-success-600 text-success-50 rounded-md hover:bg-success-700 transition-colors text-sm font-medium"
             >
               Create Task ({selectedElementIds.length})
             </button>
@@ -313,10 +310,10 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
                 selectedElementIds.forEach(id => deleteElement(id))
                 clearSelection()
               }}
-              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              className="p-2 text-destructive hover:bg-destructive-50 rounded-md transition-colors"
               title="Delete Selected"
             >
-              <Trash2 className="h-5 w-5" />
+              <Trash2 className="h-4 w-4" />
             </button>
           </div>
         )}
@@ -345,14 +342,14 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
                   y={0}
                   width={1}
                   height={2500}
-                  fill="#f0f0f0"
+                  fill="#f1f5f9"
                 />
                 <Rect
                   x={0}
                   y={i * 50}
                   width={2500}
                   height={1}
-                  fill="#f0f0f0"
+                  fill="#f1f5f9"
                 />
               </React.Fragment>
             ))}

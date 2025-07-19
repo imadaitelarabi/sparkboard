@@ -170,80 +170,80 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
-        <div className="text-lg text-gray-600">Loading tasks...</div>
+        <div className="text-base text-muted-foreground">Loading tasks...</div>
       </div>
     )
   }
 
   return (
-    <div className="h-full bg-gray-50 p-6 overflow-auto">
-      <div className="flex gap-6 min-h-full">
+    <div className="h-full bg-background p-5 overflow-auto">
+      <div className="flex gap-5 min-h-full">
         {taskCategories.map((category) => (
           <div
             key={category.id}
-            className="flex-shrink-0 w-80 bg-white rounded-lg border border-gray-200"
+            className="flex-shrink-0 w-72 bg-card rounded-lg border border-border"
             onDragOver={handleDragOver}
             onDrop={(e) => handleDrop(e, category.id)}
           >
             {/* Category Header */}
-            <div className="p-4 border-b border-gray-200">
+            <div className="p-3 border-b border-border">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <div
-                    className="w-3 h-3 rounded-full"
+                    className="w-2 h-2 rounded-full"
                     style={{ backgroundColor: category.color }}
                   />
-                  <h3 className="font-semibold text-gray-900">{category.name}</h3>
-                  <span className="text-sm text-gray-500">
+                  <h3 className="font-medium text-foreground text-sm">{category.name}</h3>
+                  <span className="text-xs text-muted-foreground">
                     {getTasksByCategory(category.id).length}
                   </span>
                 </div>
                 <button
                   onClick={() => createTask(category.id)}
-                  className="p-1 hover:bg-gray-100 rounded transition-colors"
+                  className="p-1 hover:bg-accent rounded transition-colors"
                   title="Add Task"
                 >
-                  <Plus className="h-4 w-4 text-gray-600" />
+                  <Plus className="h-4 w-4 text-muted-foreground" />
                 </button>
               </div>
             </div>
 
             {/* Tasks */}
-            <div className="p-4 space-y-3 min-h-32">
+            <div className="p-3 space-y-2 min-h-28">
               {getTasksByCategory(category.id).map((task: TaskWithDetails) => (
                 <div
                   key={task.id}
                   draggable
                   onDragStart={() => handleDragStart(task.id)}
-                  className="bg-white border border-gray-200 rounded-lg p-3 cursor-grab active:cursor-grabbing hover:shadow-sm transition-shadow"
+                  className="bg-background border border-border rounded-md p-2 cursor-grab active:cursor-grabbing hover:shadow-sm transition-all duration-normal"
                 >
-                  <div className="flex items-start justify-between mb-2">
-                    <h4 className="font-medium text-gray-900 text-sm leading-5">
+                  <div className="flex items-start justify-between mb-1">
+                    <h4 className="font-medium text-foreground text-xs leading-4">
                       {task.title}
                     </h4>
-                    <button className="p-1 hover:bg-gray-100 rounded transition-colors">
-                      <MoreHorizontal className="h-3 w-3 text-gray-400" />
+                    <button className="p-0.5 hover:bg-accent rounded transition-colors">
+                      <MoreHorizontal className="h-3 w-3 text-muted-foreground" />
                     </button>
                   </div>
 
                   {task.description && (
-                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                    <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
                       {task.description}
                     </p>
                   )}
 
                   {/* Task metadata */}
-                  <div className="flex items-center justify-between text-xs text-gray-500">
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1">
                       {task.assignee && (
                         <div className="flex items-center gap-1">
-                          <User className="h-3 w-3" />
+                          <User className="h-2 w-2" />
                           <span>{task.assignee.full_name}</span>
                         </div>
                       )}
                       {task.due_date && (
                         <div className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
+                          <Calendar className="h-2 w-2" />
                           <span>{new Date(task.due_date).toLocaleDateString()}</span>
                         </div>
                       )}
@@ -251,8 +251,8 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
 
                     {/* Linked elements indicator */}
                     {task.task_elements && task.task_elements.length > 0 && (
-                      <div className="flex items-center gap-1 text-blue-600">
-                        <ExternalLink className="h-3 w-3" />
+                      <div className="flex items-center gap-1 text-primary">
+                        <ExternalLink className="h-2 w-2" />
                         <span>{task.task_elements.length}</span>
                       </div>
                     )}
@@ -260,12 +260,12 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
 
                   {/* Priority indicator */}
                   {task.priority && task.priority !== 'medium' && (
-                    <div className="mt-2">
+                    <div className="mt-1">
                       <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                        className={`inline-flex items-center px-1 py-0.5 rounded-full text-xs font-medium ${
                           task.priority === 'high'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-yellow-100 text-yellow-800'
+                            ? 'bg-destructive-100 text-destructive-800'
+                            : 'bg-warning-100 text-warning-800'
                         }`}
                       >
                         {task.priority}
@@ -276,11 +276,11 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
               ))}
 
               {getTasksByCategory(category.id).length === 0 && (
-                <div className="text-center py-8 text-gray-400">
-                  <div className="text-sm">No tasks yet</div>
+                <div className="text-center py-6 text-muted-foreground">
+                  <div className="text-xs">No tasks yet</div>
                   <button
                     onClick={() => createTask(category.id)}
-                    className="text-xs text-blue-600 hover:text-blue-700 mt-1"
+                    className="text-xs text-primary hover:text-primary/80 mt-1 transition-colors"
                   >
                     Add the first task
                   </button>
@@ -291,13 +291,13 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
         ))}
 
         {/* Add Category */}
-        <div className="flex-shrink-0 w-80">
+        <div className="flex-shrink-0 w-72">
           <button
             onClick={createCategory}
-            className="w-full h-32 border-2 border-dashed border-gray-300 rounded-lg hover:border-gray-400 transition-colors flex items-center justify-center text-gray-600 hover:text-gray-700"
+            className="w-full h-28 border-2 border-dashed border-border rounded-lg hover:border-muted-foreground transition-colors flex items-center justify-center text-muted-foreground hover:text-foreground"
           >
             <div className="text-center">
-              <Plus className="h-6 w-6 mx-auto mb-2" />
+              <Plus className="h-5 w-5 mx-auto mb-1" />
               <span className="text-sm font-medium">Add Category</span>
             </div>
           </button>
