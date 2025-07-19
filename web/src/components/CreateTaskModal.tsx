@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { Calendar, Flag, FileText } from 'lucide-react'
+import { Calendar, Flag, FileText, Eye, Edit3 } from 'lucide-react'
 import Modal from './Modal'
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
@@ -23,7 +23,8 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
     selectedElementIds, 
     clearSelection, 
     addTask,
-    user 
+    user,
+    elements 
   } = useAppStore()
   
   const [loading, setLoading] = useState(false)
@@ -35,6 +36,76 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
     category_id: '',
     due_date: ''
   })
+  const [isDescriptionPreview, setIsDescriptionPreview] = useState(false)
+
+  const renderMarkdown = (markdown: string): React.ReactElement => {
+    if (!markdown.trim()) {
+      return <span className="text-[var(--color-muted-foreground)]">Click to add description...</span>
+    }
+
+    const lines = markdown.split('\n')
+    const elements: React.ReactElement[] = []
+
+    lines.forEach((line, index) => {
+      if (!line.trim()) {
+        elements.push(<br key={index} />)
+        return
+      }
+
+      let processedLine = line
+
+      // Headers
+      const headerMatch = processedLine.match(/^(#{1,6})\s+(.+)$/)
+      if (headerMatch) {
+        const level = headerMatch[1].length
+        const text = headerMatch[2]
+        const sizes = ['text-lg', 'text-base', 'text-sm', 'text-xs']
+        const size = sizes[Math.min(level - 1, sizes.length - 1)]
+        elements.push(
+          <h1 key={index} className={`${size} font-bold mb-2`}>
+            {text}
+          </h1>
+        )
+        return
+      }
+
+      // Bold and italic
+      processedLine = processedLine.replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
+      processedLine = processedLine.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      processedLine = processedLine.replace(/\*(.*?)\*/g, '<em>$1</em>')
+      
+      // Inline code
+      processedLine = processedLine.replace(/`([^`]+)`/g, '<code class="bg-[var(--color-accent)] px-1 py-0.5 rounded text-sm">$1</code>')
+      
+      // Links
+      processedLine = processedLine.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-[var(--color-primary)] underline" target="_blank" rel="noopener noreferrer">$1</a>')
+      
+      // Lists
+      const listMatch = processedLine.match(/^(\s*)([-*+]|\d+\.)\s+(.+)$/)
+      if (listMatch) {
+        const indent = listMatch[1].length
+        const bullet = listMatch[2]
+        const content = listMatch[3]
+        const indentStyle = { marginLeft: `${Math.min(indent * 8, 24)}px` }
+        const bulletSymbol = bullet.match(/^\d+\./) ? '•' : '•'
+        
+        elements.push(
+          <div key={index} style={indentStyle} className="flex items-start mb-1">
+            <span className="mr-2 flex-shrink-0">{bulletSymbol}</span>
+            <span dangerouslySetInnerHTML={{ __html: content }} />
+          </div>
+        )
+        return
+      }
+
+      // Regular paragraph
+      elements.push(
+        <div key={index} dangerouslySetInnerHTML={{ __html: processedLine }} />
+      )
+    })
+
+    return <div className="text-sm leading-relaxed">{elements}</div>
+  }
 
   const loadCategories = useCallback(async () => {
     if (!currentProject) return
@@ -58,19 +129,56 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
     }
   }, [currentProject, supabase])
 
+  const extractTextFromElements = useCallback(() => {
+    if (selectedElementIds.length === 0) return { title: '', description: '' }
+
+    // Find the first selected element that has text content
+    for (const elementId of selectedElementIds) {
+      const element = elements.find(el => el.id === elementId)
+      if (element && element.properties) {
+        const properties = element.properties as Record<string, unknown>
+        const elementText = properties?.text as string | undefined
+        if (elementText && elementText.trim()) {
+          const text = elementText.trim()
+          const lines = text.split('\n').filter(line => line.trim())
+          
+          if (lines.length > 0) {
+            // Parse markdown from first line for title (strip markdown formatting)
+            const firstLine = lines[0].trim()
+            const title = firstLine
+              .replace(/^#{1,6}\s+/gm, '') // Remove heading markers
+              .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold markers
+              .replace(/\*(.*?)\*/g, '$1') // Remove italic markers
+              .replace(/`{1,3}(.*?)`{1,3}/g, '$1') // Remove inline code
+              .replace(/\[(.*?)\]\(.*?\)/g, '$1') // Remove link markdown, keep text
+              .trim()
+            
+            const description = text
+            return { title, description }
+          }
+        }
+      }
+    }
+
+    return { title: '', description: '' }
+  }, [selectedElementIds, elements])
+
   useEffect(() => {
     if (isOpen && currentProject) {
       loadCategories()
-      // Reset form when opening
+      
+      // Extract text from selected elements and auto-populate form
+      const { title, description } = extractTextFromElements()
+      
       setFormData({
-        title: '',
-        description: '',
+        title,
+        description,
         priority: 'medium',
         category_id: '',
         due_date: ''
       })
     }
-  }, [isOpen, currentProject, loadCategories])
+  }, [isOpen, currentProject, loadCategories, extractTextFromElements])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -163,15 +271,37 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
           <label className="block text-sm font-medium text-[var(--color-card-foreground)] mb-2">
             <FileText className="h-4 w-4 inline mr-1" />
             Description
+            <button
+              type="button"
+              onClick={() => setIsDescriptionPreview(!isDescriptionPreview)}
+              className="ml-2 text-xs px-2 py-1 bg-[var(--color-accent)] text-[var(--color-accent-foreground)] rounded hover:bg-[var(--color-accent-600)] transition-colors"
+              disabled={loading}
+            >
+              {isDescriptionPreview ? (
+                <><Edit3 className="h-3 w-3 inline mr-1" /> Edit</>
+              ) : (
+                <><Eye className="h-3 w-3 inline mr-1" /> Preview</>
+              )}
+            </button>
           </label>
-          <textarea
-            value={formData.description}
-            onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-            placeholder="Describe the task..."
-            rows={3}
-            className="w-full px-3 py-2 bg-[var(--color-input)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:ring-2 focus:ring-[var(--color-ring)] focus:border-transparent text-sm resize-none"
-            disabled={loading}
-          />
+          
+          {isDescriptionPreview ? (
+            <div 
+              className="w-full min-h-[6rem] px-3 py-2 bg-[var(--color-input)] border border-[var(--color-border)] rounded-[var(--radius-md)] text-sm cursor-pointer"
+              onClick={() => setIsDescriptionPreview(false)}
+            >
+              {renderMarkdown(formData.description)}
+            </div>
+          ) : (
+            <textarea
+              value={formData.description}
+              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+              placeholder="Describe the task... (supports markdown)"
+              rows={3}
+              className="w-full px-3 py-2 bg-[var(--color-input)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:ring-2 focus:ring-[var(--color-ring)] focus:border-transparent text-sm resize-none"
+              disabled={loading}
+            />
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
