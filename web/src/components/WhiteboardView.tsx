@@ -36,6 +36,8 @@ import InputModal from './InputModal'
 import MarkdownEditModal from './MarkdownEditModal'
 import ThemeToggle from './ThemeToggle'
 import MarkdownText from './MarkdownText'
+import MarkdownToolbar from './MarkdownToolbar'
+import InlineMarkdownEditor from './InlineMarkdownEditor'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 
 type Tables = Database['public']['Tables']
@@ -291,6 +293,8 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 })
   const [editingElement, setEditingElement] = useState<{ id: string; text: string } | null>(null)
   const [editingMarkdownElement, setEditingMarkdownElement] = useState<{ id: string; text: string } | null>(null)
+  const [inlineEditingElement, setInlineEditingElement] = useState<string | null>(null)
+  const [insertFormattingFn, setInsertFormattingFn] = useState<((before: string, after?: string) => void) | null>(null)
   const [selectedColor, setSelectedColor] = useState<ElementColorKey>('primary')
   const [customColor, setCustomColor] = useState('#6366f1')
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; elementId: string } | null>(null)
@@ -1534,9 +1538,10 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
         width={handleSize}
         height={handleSize}
         fill="#ffffff"
-        stroke="#2563eb"
+        stroke="var(--color-primary-500)"
         strokeWidth={1.5 / stageScale}
         draggable={false}
+        perfectDrawEnabled={false}
         onMouseDown={(e) => {
           const stage = stageRef.current
           if (!stage) return
@@ -1582,8 +1587,8 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     // Get effective style values
     const fillOpacity = getEffectiveFillOpacity(props)
     const strokeOpacity = getEffectiveStrokeOpacity(props)
-    const strokeWidth = isSelected ? 3 : (props.strokeWidth || 2)
-    const strokeColor = isSelected ? 'var(--color-destructive-500)' : (props.stroke as string)
+    const strokeWidth = isSelected ? 2 : (props.strokeWidth || 2)
+    const strokeColor = isSelected ? 'var(--color-primary-500)' : (props.stroke as string)
     const dashArray = getStrokeDashArray(props.strokeStyle, strokeWidth)
     
     const baseProps = {
@@ -1667,12 +1672,20 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
             verticalAlign="top"
             onClick={(e: Konva.KonvaEventObject<MouseEvent>) => handleElementClick(element.id, e)}
             onDblClick={() => {
-              setEditingMarkdownElement({ id: element.id, text: (props.text as string) || '' })
+              setInlineEditingElement(element.id)
             }}
-            draggable={activeTool === 'select'}
+            draggable={activeTool === 'select' && inlineEditingElement !== element.id}
             onDragMove={(e: Konva.KonvaEventObject<DragEvent>) => handleElementDrag(element.id, e.target.attrs)}
             onDragEnd={(e: Konva.KonvaEventObject<DragEvent>) => handleElementDragEnd(element.id, e.target.attrs)}
             onContextMenu={(e: Konva.KonvaEventObject<MouseEvent>) => handleElementRightClick(element.id, e)}
+            isEditing={inlineEditingElement === element.id}
+            onTextSave={(newText: string) => {
+              updateElementProperties(element.id, { text: newText })
+              setInlineEditingElement(null)
+            }}
+            onEditingCancel={() => {
+              setInlineEditingElement(null)
+            }}
           />
         )
       case 'arrow':
@@ -1923,14 +1936,14 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
                   el !== undefined && (el.type === 'rectangle' || el.type === 'circle' || el.type === 'text')
                 )
               
-              // Get text elements specifically
-              const textElements = selectedElementIds
-                .map(id => elements.find(el => el.id === id))
-                .filter((el): el is NonNullable<typeof el> => 
-                  el !== undefined && el.type === 'text'
-                )
               
-              if (supportedElements.length === 0) return null
+              // Get non-text elements that need styling controls
+              const nonTextElements = supportedElements.filter(el => el.type !== 'text')
+              
+              // Only show the toolbar container if we're in inline editing mode OR there are non-text elements
+              const shouldShowContainer = !!inlineEditingElement || nonTextElements.length > 0
+              
+              if (!shouldShowContainer) return null
 
               // Check if all elements have the same property value
               const getCommonValue = <K extends keyof ElementProperties>(key: K): ElementProperties[K] | undefined => {
@@ -1944,66 +1957,18 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
 
               return (
                 <div className="flex items-center gap-4 px-3 py-1 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
-                  {/* Text Formatting Controls - only show for text elements */}
-                  {textElements.length > 0 && (
-                    <>
-                      {/* Font Size Controls */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-purple-700 dark:text-purple-300 font-medium">Size</span>
-                        <div className="flex gap-1">
-                          {[12, 16, 20, 24, 32].map((fontSize) => (
-                            <button
-                              key={fontSize}
-                              onClick={() => {
-                                textElements.forEach(element => {
-                                  updateElementProperties(element.id, { fontSize })
-                                })
-                              }}
-                              className={`px-2 py-1 text-xs rounded transition-colors ${
-                                (getCommonValue('fontSize') || 16) === fontSize
-                                  ? 'bg-purple-500 text-white'
-                                  : 'bg-white dark:bg-gray-800 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-800/50'
-                              }`}
-                              title={`${fontSize}px`}
-                            >
-                              {fontSize}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      
-                      {/* Font Weight Controls */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-purple-700 dark:text-purple-300 font-medium">Weight</span>
-                        <div className="flex gap-1">
-                          {[
-                            { value: 'normal', label: 'Normal' },
-                            { value: 'bold', label: 'Bold' }
-                          ].map(({ value, label }) => (
-                            <button
-                              key={value}
-                              onClick={() => {
-                                textElements.forEach(element => {
-                                  updateElementProperties(element.id, { fontWeight: value })
-                                })
-                              }}
-                              className={`px-2 py-1 text-xs rounded transition-colors ${
-                                (getCommonValue('fontWeight') || 'normal') === value
-                                  ? 'bg-purple-500 text-white'
-                                  : 'bg-white dark:bg-gray-800 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-800/50'
-                              }`}
-                              title={label}
-                            >
-                              {value === 'bold' ? <strong>B</strong> : 'N'}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </>
-                  )}
+                  {/* Markdown Toolbar - only show during inline editing */}
+                  <MarkdownToolbar 
+                    isVisible={!!inlineEditingElement}
+                    onInsertFormatting={(before: string, after?: string) => {
+                      if (insertFormattingFn) {
+                        insertFormattingFn(before, after)
+                      }
+                    }}
+                  />
                   
                   {/* Opacity and Stroke Style - only show for shapes */}
-                  {supportedElements.filter(el => el.type !== 'text').length > 0 && (
+                  {nonTextElements.length > 0 && (
                     <>
                       {/* Quick Opacity Presets */}
                       <div className="flex items-center gap-2">
@@ -2209,8 +2174,8 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
                 y={selectionRect.y}
                 width={selectionRect.width}
                 height={selectionRect.height}
-                fill="rgba(59, 130, 246, 0.08)"
-                stroke="#3b82f6"
+                fill="rgba(99, 102, 241, 0.05)"
+                stroke="var(--color-primary-500)"
                 strokeWidth={1.5 / stageScale}
                 dash={[4 / stageScale, 4 / stageScale]}
                 listening={false}
@@ -2300,6 +2265,49 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
           </div>
         </div>
       )}
+
+      {/* Inline Markdown Editor */}
+      {inlineEditingElement && (() => {
+        const element = elements.find(el => el.id === inlineEditingElement)
+        if (!element) return null
+        
+        const props = element.properties as ElementProperties
+        const stageRect = stageRef.current?.content?.getBoundingClientRect()
+        
+        if (!stageRect) return null
+        
+        // Calculate absolute position on screen
+        const absoluteX = stageRect.left + (element.x || 0) * stageScale + stagePos.x
+        const absoluteY = stageRect.top + (element.y || 0) * stageScale + stagePos.y
+        const scaledWidth = (element.width || 200) * stageScale
+        const scaledHeight = (element.height || 100) * stageScale
+        
+        return (
+          <InlineMarkdownEditor
+            x={absoluteX}
+            y={absoluteY}
+            width={scaledWidth}
+            height={scaledHeight}
+            fontSize={(props.fontSize as number || 16) * stageScale}
+            fontFamily="Arial, sans-serif"
+            fill={props.fill as string || 'var(--color-foreground)'}
+            initialValue={props.text as string || ''}
+            isEditing={true}
+            onSave={(newText: string) => {
+              updateElementProperties(element.id, { text: newText })
+              setInlineEditingElement(null)
+              setInsertFormattingFn(null)
+            }}
+            onCancel={() => {
+              setInlineEditingElement(null)
+              setInsertFormattingFn(null)
+            }}
+            onReady={(insertFn) => {
+              setInsertFormattingFn(() => insertFn)
+            }}
+          />
+        )
+      })()}
 
     </div>
   )

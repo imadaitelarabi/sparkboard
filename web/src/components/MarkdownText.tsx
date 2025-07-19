@@ -21,6 +21,9 @@ interface MarkdownTextProps {
   onDragMove?: (e: Konva.KonvaEventObject<DragEvent>) => void
   onDragEnd?: (e: Konva.KonvaEventObject<DragEvent>) => void
   onContextMenu?: (e: Konva.KonvaEventObject<MouseEvent>) => void
+  isEditing?: boolean
+  onTextSave?: (newText: string) => void
+  onEditingCancel?: () => void
 }
 
 // Simple markdown parser for basic formatting
@@ -134,14 +137,13 @@ export default function MarkdownText({
   fontSize = 16,
   fill = '#000000',
   fontFamily = 'Arial, sans-serif',
-  align = 'left',
-  verticalAlign = 'top',
   onClick,
   onDblClick,
   draggable = false,
   onDragMove,
   onDragEnd,
-  onContextMenu
+  onContextMenu,
+  isEditing = false
 }: MarkdownTextProps) {
   const tokens = parseMarkdown(text, fontSize)
   
@@ -165,8 +167,6 @@ export default function MarkdownText({
     }
     
     const tokenFontSize = token.fontSize || fontSize
-    const fontWeight = token.bold ? 'bold' : 'normal'
-    const fontStyle = token.italic ? 'italic' : 'normal'
     
     // Better font style handling for Konva
     let konvaFontStyle = 'normal'
@@ -214,7 +214,7 @@ export default function MarkdownText({
       height={height}
       onClick={onClick}
       onDblClick={onDblClick}
-      draggable={draggable}
+      draggable={draggable && !isEditing}
       onDragMove={onDragMove}
       onDragEnd={onDragEnd}
       onContextMenu={onContextMenu}
@@ -232,7 +232,7 @@ export default function MarkdownText({
         fill="transparent"
         stroke="transparent"
       />
-      {textElements}
+      {!isEditing && textElements}
     </Group>
   )
 }
