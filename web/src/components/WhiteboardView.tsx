@@ -273,7 +273,6 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 })
   const [editingElement, setEditingElement] = useState<{ id: string; text: string } | null>(null)
   const [selectedColor, setSelectedColor] = useState<ElementColorKey>('primary')
-  const [showFloatingColorPicker, setShowFloatingColorPicker] = useState(false)
   const [customColor, setCustomColor] = useState('#6366f1')
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; elementId: string } | null>(null)
   const [clipboard, setClipboard] = useState<Element[]>([])
@@ -300,7 +299,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     const newElements = []
 
     for (const element of clipboard) {
-      const newElement = {
+      const newElement: Omit<Element, 'id' | 'created_at' | 'updated_at'> = {
         board_id: board.id,
         type: element.type,
         x: (element.x || 0) + offset,
@@ -341,7 +340,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     const newElements = []
 
     for (const element of selectedElements) {
-      const newElement = {
+      const newElement: Omit<Element, 'id' | 'created_at' | 'updated_at'> = {
         board_id: board.id,
         type: element.type,
         x: (element.x || 0) + offset,
@@ -433,7 +432,6 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       callback: () => {
         clearSelection()
         setContextMenu(null)
-        setShowFloatingColorPicker(false)
         if (activeTool !== 'select') {
           setActiveTool('select')
         }
@@ -542,15 +540,9 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     loadElements()
   }, [board.id])
   
-  // Close floating color picker and context menu when clicking outside
+  // Close context menu when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (showFloatingColorPicker) {
-        const target = event.target
-        if (target instanceof Element && !target.closest('.floating-color-picker')) {
-          setShowFloatingColorPicker(false)
-        }
-      }
       if (contextMenu) {
         const target = event.target
         if (target instanceof Element && !target.closest('.context-menu')) {
@@ -561,16 +553,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showFloatingColorPicker, contextMenu])
-  
-  // Show floating color picker when elements are selected
-  useEffect(() => {
-    if (selectedElementIds.length > 0) {
-      setShowFloatingColorPicker(true)
-    } else {
-      setShowFloatingColorPicker(false)
-    }
-  }, [selectedElementIds.length])
+  }, [contextMenu])
 
   async function loadElements() {
     try {
@@ -707,152 +690,6 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1)
   }
   
-  // Calculate position for floating color picker (very close to elements)
-  function getFloatingColorPickerPosition() {
-    if (selectedElementIds.length === 0) return { x: 0, y: 0 }
-    
-    const selectedElements = elements.filter(el => selectedElementIds.includes(el.id))
-    if (selectedElements.length === 0) return { x: 0, y: 0 }
-    
-    // Find the bounding box of all selected elements
-    const bounds = selectedElements.reduce((acc, element) => {
-      const x = element.x || 0
-      const y = element.y || 0
-      const width = element.width || 0
-      const height = element.height || 0
-      
-      return {
-        minX: Math.min(acc.minX, x),
-        minY: Math.min(acc.minY, y),
-        maxX: Math.max(acc.maxX, x + width),
-        maxY: Math.max(acc.maxY, y + height)
-      }
-    }, { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity })
-    
-    // Position picker very close above the selection
-    const pickerWidth = 200
-    const pickerHeight = 100
-    const padding = 8 // Much smaller padding for closer positioning
-    
-    // Center horizontally above the selection
-    const centerX = (bounds.minX + bounds.maxX) / 2
-    let x = centerX - pickerWidth / 2
-    let y = bounds.minY - pickerHeight - padding
-    
-    // Convert from canvas coordinates to screen coordinates
-    const screenX = x * stageScale + stagePos.x
-    const screenY = y * stageScale + stagePos.y
-    
-    // Adjust if picker would go off-screen (but keep it close)
-    const viewportWidth = window.innerWidth
-    const minPadding = 8
-    
-    // Horizontal adjustments - stay close to element
-    if (screenX < minPadding) {
-      x = (minPadding - stagePos.x) / stageScale
-    } else if (screenX + pickerWidth > viewportWidth - minPadding) {
-      x = (viewportWidth - pickerWidth - minPadding - stagePos.x) / stageScale
-    }
-    
-    // If not enough space above, position below but very close
-    if (screenY < minPadding) {
-      y = bounds.maxY + padding
-    }
-    
-    // Final screen coordinates
-    const finalScreenX = x * stageScale + stagePos.x
-    const finalScreenY = y * stageScale + stagePos.y
-    
-    return { x: finalScreenX, y: finalScreenY }
-  }
-  
-  // Render floating color picker (compact version)
-  function renderFloatingColorPicker() {
-    if (!showFloatingColorPicker || selectedElementIds.length === 0) return null
-    
-    const position = getFloatingColorPickerPosition()
-    
-    return (
-      <div 
-        className="floating-color-picker fixed z-50 bg-card border border-border rounded-lg shadow-xl p-3 animate-in fade-in zoom-in-95 duration-200"
-        style={{
-          left: `${position.x}px`,
-          top: `${position.y}px`,
-          width: '200px'
-        }}
-      >
-        {/* Primary 4 Colors */}
-        <div className="flex gap-2 mb-3">
-          {PRIMARY_COLORS.map(colorKey => {
-            const config = ELEMENT_COLORS[colorKey]
-            const fillColor = getComputedColor(config.fill)
-            const strokeColor = getComputedColor(config.stroke)
-            const isCurrentColor = selectedElementIds.some(id => {
-              const element = elements.find(el => el.id === id)
-              return element?.properties && (element.properties as Record<string, unknown>).colorKey === colorKey
-            })
-            
-            return (
-              <button
-                key={colorKey}
-                onClick={() => {
-                  selectedElementIds.forEach(id => changeElementColor(id, colorKey))
-                }}
-                className={`relative flex-1 p-2 rounded-lg transition-all duration-200 hover:scale-105 ${
-                  isCurrentColor ? 'ring-2 ring-white scale-105' : 'hover:ring-2 hover:ring-white/50'
-                }`}
-                title={config.name}
-              >
-                <div 
-                  className="w-8 h-8 rounded-full mx-auto transition-all duration-200"
-                  style={{ 
-                    backgroundColor: fillColor,
-                    border: `2px solid ${strokeColor}`
-                  }}
-                />
-                {isCurrentColor && (
-                  <div className="absolute top-1 right-1 w-2 h-2 bg-white rounded-full" />
-                )}
-              </button>
-            )
-          })}
-        </div>
-        
-        {/* Custom Color Picker */}
-        <div className="border-t border-border pt-3">
-          <div className="flex gap-2 items-center">
-            <input
-              type="color"
-              value={customColor}
-              onChange={(e) => {
-                setCustomColor(e.target.value)
-                // Auto-apply custom color when changed
-                selectedElementIds.forEach(id => changeElementToCustomColor(id, e.target.value))
-              }}
-              className="w-8 h-8 rounded border border-border cursor-pointer flex-shrink-0"
-              title="Custom color picker"
-            />
-            <input
-              type="text"
-              value={customColor}
-              onChange={(e) => setCustomColor(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  selectedElementIds.forEach(id => changeElementToCustomColor(id, customColor))
-                }
-              }}
-              placeholder="#ffffff"
-              className="flex-1 px-2 py-1 text-xs border border-border rounded bg-input text-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
-              pattern="^#[0-9A-Fa-f]{6}$"
-            />
-          </div>
-          <div className="text-xs text-muted-foreground mt-1 text-center">
-            Pick or type hex color
-          </div>
-        </div>
-      </div>
-    )
-  }
   
   // Render context menu
   function renderContextMenu() {
@@ -1239,75 +1076,211 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     { type: 'sticky_note', icon: StickyNote, label: 'Sticky Note' }
   ] as const
 
-  return (
-    <div className="h-full flex flex-col bg-background">
-      {/* Toolbar */}
-      <div className="bg-card border-b border-border p-3 flex items-center justify-between">
-        <div className="flex items-center gap-1">
-          {tools.map(({ type, icon: Icon, label }) => {
-            // Map tools to their keyboard shortcuts
-            const shortcutMap: Record<string, string> = {
-              select: 'V',
-              rectangle: 'R',
-              circle: 'C',
-              text: 'T',
-              arrow: 'A',
-              sticky_note: 'S'
-            }
-            
-            // Detect platform for correct modifier key display
-            const isMac = typeof navigator !== 'undefined' && 
-                         (navigator.userAgent.includes('Mac') || navigator.userAgent.includes('iPhone') || navigator.userAgent.includes('iPad'))
-            const modifierKey = isMac ? '⌘' : 'Ctrl'
-            
-            return (
-              <button
-                key={type}
-                onClick={() => handleToolChange(type)}
-                className={`p-2 rounded-md transition-all duration-200 ${
-                  activeTool === type
-                    ? 'bg-primary text-primary-foreground shadow-md scale-105'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground hover:scale-105'
-                }`}
-                title={`${label} (${shortcutMap[type]}) • ${modifierKey}+C: Copy • ${modifierKey}+V: Paste • ${modifierKey}+D: Duplicate • Del: Delete`}
-              >
-                <Icon className="h-4 w-4" />
-              </button>
-            )
-          })}
+  // Render left panel
+  function renderLeftPanel() {
+    return (
+      <div className="w-64 bg-card border-r border-border flex flex-col">
+        {/* Tools Section */}
+        <div className="p-4 border-b border-border">
+          <h3 className="text-sm font-medium text-foreground mb-3">Tools</h3>
+          <div className="grid grid-cols-3 gap-2">
+            {tools.map(({ type, icon: Icon, label }) => {
+              const shortcutMap: Record<string, string> = {
+                select: 'V',
+                rectangle: 'R',
+                circle: 'C',
+                text: 'T',
+                arrow: 'A',
+                sticky_note: 'S'
+              }
+              
+              return (
+                <button
+                  key={type}
+                  onClick={() => handleToolChange(type)}
+                  className={`p-3 rounded-lg transition-all duration-200 flex flex-col items-center gap-1 ${
+                    activeTool === type
+                      ? 'bg-primary text-primary-foreground shadow-md'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  }`}
+                  title={`${label} (${shortcutMap[type]})`}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span className="text-xs">{shortcutMap[type]}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
 
-        {selectedElementIds.length > 0 && (
-          <div className="flex items-center gap-2">
-            <div className="text-sm text-muted-foreground">
-              {selectedElementIds.length} selected
+        {/* Colors Section */}
+        <div className="p-4 border-b border-border">
+          <h3 className="text-sm font-medium text-foreground mb-3">Colors</h3>
+          
+          {/* Primary 4 Colors */}
+          <div className="grid grid-cols-4 gap-2 mb-4">
+            {PRIMARY_COLORS.map(colorKey => {
+              const config = ELEMENT_COLORS[colorKey]
+              const fillColor = getComputedColor(config.fill)
+              const strokeColor = getComputedColor(config.stroke)
+              
+              return (
+                <button
+                  key={colorKey}
+                  onClick={() => {
+                    setSelectedColor(colorKey)
+                    if (selectedElementIds.length > 0) {
+                      selectedElementIds.forEach(id => changeElementColor(id, colorKey))
+                    }
+                  }}
+                  className={`p-2 rounded-lg transition-all duration-200 hover:scale-105 ${
+                    selectedColor === colorKey ? 'ring-2 ring-primary scale-105' : 'hover:ring-2 hover:ring-gray-300'
+                  }`}
+                  title={config.name}
+                >
+                  <div 
+                    className="w-8 h-8 rounded-full mx-auto transition-all duration-200"
+                    style={{ 
+                      backgroundColor: fillColor,
+                      border: `2px solid ${strokeColor}`
+                    }}
+                  />
+                </button>
+              )
+            })}
+          </div>
+
+          {/* All Colors Grid */}
+          <div className="grid grid-cols-6 gap-1 mb-4">
+            {Object.entries(ELEMENT_COLORS).map(([colorKey, config]) => {
+              const fillColor = getComputedColor(config.fill)
+              const strokeColor = getComputedColor(config.stroke)
+              
+              return (
+                <button
+                  key={colorKey}
+                  onClick={() => {
+                    setSelectedColor(colorKey as ElementColorKey)
+                    if (selectedElementIds.length > 0) {
+                      selectedElementIds.forEach(id => changeElementColor(id, colorKey as ElementColorKey))
+                    }
+                  }}
+                  className={`p-1 rounded transition-all duration-200 hover:scale-110 ${
+                    selectedColor === colorKey ? 'ring-2 ring-primary scale-110' : ''
+                  }`}
+                  title={config.name}
+                >
+                  <div 
+                    className="w-6 h-6 rounded border transition-all duration-200"
+                    style={{ 
+                      backgroundColor: fillColor,
+                      borderColor: strokeColor
+                    }}
+                  />
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Custom Color Picker */}
+          <div className="border-t border-border pt-3">
+            <div className="flex gap-2 items-center mb-2">
+              <input
+                type="color"
+                value={customColor}
+                onChange={(e) => {
+                  setCustomColor(e.target.value)
+                  if (selectedElementIds.length > 0) {
+                    selectedElementIds.forEach(id => changeElementToCustomColor(id, e.target.value))
+                  }
+                }}
+                className="w-8 h-8 rounded border border-border cursor-pointer flex-shrink-0"
+                title="Custom color picker"
+              />
+              <input
+                type="text"
+                value={customColor}
+                onChange={(e) => setCustomColor(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && selectedElementIds.length > 0) {
+                    selectedElementIds.forEach(id => changeElementToCustomColor(id, customColor))
+                  }
+                }}
+                placeholder="#ffffff"
+                className="flex-1 px-2 py-1 text-xs border border-border rounded bg-input text-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+                pattern="^#[0-9A-Fa-f]{6}$"
+              />
             </div>
-            <button
-              onClick={() => setIsCreateTaskModalOpen(true)}
-              className="px-3 py-2 bg-success-600 text-success-50 rounded-md hover:bg-success-700 transition-colors text-sm font-medium"
-            >
-              Create Task
-            </button>
-            <button
-              onClick={() => {
-                selectedElementIds.forEach(id => deleteElement(id))
-                clearSelection()
-              }}
-              className="p-2 text-destructive hover:bg-destructive-50 rounded-md transition-colors"
-              title="Delete Selected"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+            <div className="text-xs text-muted-foreground">
+              Pick or type hex color
+            </div>
+          </div>
+        </div>
+
+        {/* Selection Actions */}
+        {selectedElementIds.length > 0 && (
+          <div className="p-4 border-b border-border">
+            <h3 className="text-sm font-medium text-foreground mb-3">
+              Selection ({selectedElementIds.length})
+            </h3>
+            <div className="space-y-2">
+              <button
+                onClick={() => setIsCreateTaskModalOpen(true)}
+                className="w-full flex items-center gap-3 px-3 py-2 bg-success-600 text-success-50 rounded-md hover:bg-success-700 transition-colors text-sm font-medium"
+              >
+                <Plus className="h-4 w-4" />
+                Create Task
+              </button>
+              <button
+                onClick={() => {
+                  duplicateElements()
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2 bg-accent text-accent-foreground rounded-md hover:bg-accent/80 transition-colors text-sm"
+              >
+                <Copy className="h-4 w-4" />
+                Duplicate
+              </button>
+              <button
+                onClick={() => {
+                  selectedElementIds.forEach(id => deleteElement(id))
+                  clearSelection()
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/80 transition-colors text-sm"
+              >
+                <Trash2 className="h-4 w-4" />
+                Remove
+              </button>
+            </div>
           </div>
         )}
-      </div>
 
-      {/* Canvas */}
-      <div className="flex-1 overflow-hidden">
-        <Stage
-          ref={stageRef}
-          width={window.innerWidth}
-          height={window.innerHeight - 140} // Account for header and toolbar
+      </div>
+    )
+  }
+
+  return (
+    <div className="h-full flex bg-background">
+      {/* Left Panel */}
+      {renderLeftPanel()}
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col">
+        {/* Toolbar */}
+        <div className="bg-card border-b border-border p-3 flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            {board.name} - Whiteboard
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Zoom: {Math.round(stageScale * 100)}%
+          </div>
+        </div>
+
+        {/* Canvas */}
+        <div className="flex-1 overflow-hidden">
+          <Stage
+            ref={stageRef}
+            width={window.innerWidth - 256} // Account for left panel (w-64 = 256px)
+            height={window.innerHeight - 140} // Account for header and toolbar
           scaleX={stageScale}
           scaleY={stageScale}
           x={stagePos.x}
@@ -1397,11 +1370,9 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
             })}
           </Layer>
         </Stage>
+        </div>
       </div>
 
-      {/* Floating Color Picker */}
-      {renderFloatingColorPicker()}
-      
       {/* Context Menu */}
       {renderContextMenu()}
       
