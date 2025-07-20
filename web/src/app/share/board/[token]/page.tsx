@@ -20,7 +20,7 @@ interface SharedBoardData {
 export default function SharedBoardPage() {
   const params = useParams()
   const router = useRouter()
-  const token = params.token as string
+  const token = decodeURIComponent(params.token as string)
   
   const [boardData, setBoardData] = useState<SharedBoardData | null>(null)
   const [loading, setLoading] = useState(true)

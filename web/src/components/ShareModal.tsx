@@ -54,7 +54,7 @@ export default function ShareModal({ isOpen, onClose, board }: ShareModalProps) 
         .from('board_members')
         .select(`
           *,
-          user_profiles!board_members_user_id_fkey(email, full_name)
+          user_profiles!inner(email, full_name)
         `)
         .eq('board_id', board.id)
 
@@ -153,7 +153,8 @@ export default function ShareModal({ isOpen, onClose, board }: ShareModalProps) 
   }
 
   const copyShareLink = async (shareToken: string) => {
-    const link = `${window.location.origin}/share/board/${shareToken}`
+    const encodedToken = encodeURIComponent(shareToken)
+    const link = `${window.location.origin}/share/board/${encodedToken}`
     await navigator.clipboard.writeText(link)
     setCopiedLink(shareToken)
     setTimeout(() => setCopiedLink(null), 2000)
