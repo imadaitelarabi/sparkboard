@@ -1,6 +1,6 @@
 import type { Database } from './database.types'
 
-export type ElementType = 'rectangle' | 'circle' | 'text' | 'arrow' | 'sticky_note'
+export type ElementType = 'rectangle' | 'circle' | 'text' | 'arrow' | 'sticky_note' | 'image'
 
 export type ElementRow = Database['public']['Tables']['elements']['Row']
 
@@ -41,6 +41,11 @@ export interface ElementProperties {
   // Advanced properties for future use
   fillOpacity?: number // separate from overall opacity
   strokeOpacity?: number
+  
+  // Image-specific properties
+  imageUrl?: string // URL to the image in Supabase storage
+  imageStoragePath?: string // Storage path for cleanup
+  aspectRatio?: number // width/height for maintaining proportions
 }
 
 // Helper type for element with typed properties

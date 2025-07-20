@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 
 // Extend Window interface for zoom timeout
 declare global {
@@ -8,7 +8,7 @@ declare global {
     zoomTimeout?: NodeJS.Timeout
   }
 }
-import { Stage, Layer, Rect, Circle, Text, Arrow } from 'react-konva'
+import { Stage, Layer, Rect, Circle, Text, Arrow, Image as KonvaImage } from 'react-konva'
 import Konva from 'konva'
 import { 
   Square, 
@@ -20,9 +20,11 @@ import {
   Trash2,
   Plus,
   Copy,
-  Layers
+  Layers,
+  Image
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
+import { imageUploadService } from '@/lib/image-upload'
 import { useAppStore } from '@/store'
 import { Database } from '@/types/database.types'
 import { 
@@ -48,7 +50,89 @@ interface WhiteboardViewProps {
   board: Board
 }
 
-type ToolType = 'select' | 'rectangle' | 'circle' | 'text' | 'arrow' | 'sticky_note'
+type ToolType = 'select' | 'rectangle' | 'circle' | 'text' | 'arrow' | 'sticky_note' | 'image'
+
+// Extracted ImageElement component for better performance
+const ImageElement = React.memo(({ element, baseProps }: { 
+  element: WhiteboardElement, 
+  baseProps: {
+    x: number
+    y: number
+    width: number
+    height: number
+    rotation: number
+    draggable: boolean
+    onClick: (e: Konva.KonvaEventObject<MouseEvent>) => void
+    onDblClick: () => void
+    onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => void
+    onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void
+    onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>) => void
+    stroke: string
+    strokeWidth: number
+    dash: number[]
+    opacity: number
+  }
+}) => {
+  const [image, setImage] = useState<HTMLImageElement | null>(null)
+  const props = element.properties as ElementProperties || {}
+
+  // Use useMemo to prevent image recreation on every render
+  const imageLoader = useMemo(() => {
+    if (!props.imageUrl) return null
+
+    const img = new window.Image()
+    img.crossOrigin = 'anonymous'
+    
+    return new Promise<HTMLImageElement>((resolve, reject) => {
+      img.onload = () => resolve(img)
+      img.onerror = (e) => {
+        console.error('Failed to load image:', props.imageUrl, e)
+        // Try loading without crossOrigin if it fails
+        const imgRetry = new window.Image()
+        imgRetry.onload = () => resolve(imgRetry)
+        imgRetry.onerror = () => {
+          console.error('Failed to load image even without CORS:', props.imageUrl)
+          reject(new Error('Failed to load image'))
+        }
+        imgRetry.src = props.imageUrl!
+      }
+      img.src = props.imageUrl!
+    })
+  }, [props.imageUrl])
+
+  useEffect(() => {
+    if (imageLoader) {
+      imageLoader
+        .then(setImage)
+        .catch(() => setImage(null))
+    } else {
+      setImage(null)
+    }
+  }, [imageLoader])
+
+  if (!image) {
+    // Show loading placeholder
+    return (
+      <Rect
+        {...baseProps}
+        fill="var(--color-gray-100)"
+        stroke="var(--color-gray-300)"
+        strokeWidth={1}
+        dash={[5, 5]}
+      />
+    )
+  }
+
+  return (
+    <KonvaImage
+      {...baseProps}
+      image={image}
+      opacity={props.opacity || 1}
+    />
+  )
+})
+
+ImageElement.displayName = 'ImageElement'
 
 // Helper function to get computed color value
 function getComputedColor(cssVar: string): string {
@@ -258,7 +342,8 @@ const DEFAULT_ELEMENT_COLORS: Record<string, ElementColorKey> = {
   circle: 'secondary', 
   text: 'gray-dark',
   arrow: 'gray',
-  sticky_note: 'warning'
+  sticky_note: 'warning',
+  image: 'primary'
 }
 
 // Primary 4 colors for quick selection
@@ -333,6 +418,11 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     if (toolType !== 'select' && DEFAULT_ELEMENT_COLORS[toolType]) {
       setSelectedColor(DEFAULT_ELEMENT_COLORS[toolType])
     }
+    
+    // Handle image tool - open file picker immediately
+    if (toolType === 'image') {
+      handleImageUpload()
+    }
   }
 
   // Copy selected elements to clipboard
@@ -340,6 +430,63 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     const selectedElements = elements.filter(el => selectedElementIds.includes(el.id))
     setClipboard(selectedElements)
   }
+
+  // Handle pasting images from system clipboard
+  const handleClipboardPaste = useCallback(async (e: ClipboardEvent) => {
+    const items = Array.from(e.clipboardData?.items || [])
+    
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault()
+        const file = item.getAsFile()
+        if (file) {
+          try {
+            const result = await imageUploadService.uploadImage(file, board.id)
+            
+            // Create image element in center of viewport
+            const stageCenter = {
+              x: (window.innerWidth - 256) / 2 / stageScale - stagePos.x / stageScale,
+              y: (window.innerHeight - 140) / 2 / stageScale - stagePos.y / stageScale
+            }
+            
+            const imageWidth = 200 // Default width
+            const imageHeight = imageWidth / result.aspectRatio
+            
+            const newElement: Omit<Element, 'id' | 'created_at' | 'updated_at'> = {
+              board_id: board.id,
+              type: 'image',
+              x: stageCenter.x - imageWidth / 2,
+              y: stageCenter.y - imageHeight / 2,
+              width: imageWidth,
+              height: imageHeight,
+              rotation: 0,
+              properties: {
+                imageUrl: result.url,
+                imageStoragePath: result.storagePath,
+                aspectRatio: result.aspectRatio
+              },
+              layer_index: elements.length,
+              created_by: (user as { id: string } | null)?.id || ''
+            }
+
+            const { data, error } = await supabase
+              .from('elements')
+              .insert(newElement)
+              .select()
+              .single()
+
+            if (error) throw error
+            addElement(data)
+            setSelectedElementIds([data.id])
+          } catch (error) {
+            console.error('Error pasting image:', error)
+            alert('Failed to paste image. Please try again.')
+          }
+        }
+        return // Only handle the first image
+      }
+    }
+  }, [board.id, stageScale, stagePos, elements.length, user, addElement, supabase, setSelectedElementIds])
 
   // Paste elements from clipboard
   const pasteElements = async () => {
@@ -379,6 +526,62 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     // Add all new elements to store and select them
     newElements.forEach(element => addElement(element))
     setSelectedElementIds(newElements.map(el => el.id))
+  }
+
+  // Handle image upload
+  const handleImageUpload = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (file) {
+        try {
+          const result = await imageUploadService.uploadImage(file, board.id)
+          
+          // Create image element in center of viewport
+          const stageCenter = {
+            x: (window.innerWidth - 256) / 2 / stageScale - stagePos.x / stageScale,
+            y: (window.innerHeight - 140) / 2 / stageScale - stagePos.y / stageScale
+          }
+          
+          const imageWidth = 200 // Default width
+          const imageHeight = imageWidth / result.aspectRatio
+          
+          const newElement: Omit<Element, 'id' | 'created_at' | 'updated_at'> = {
+            board_id: board.id,
+            type: 'image',
+            x: stageCenter.x - imageWidth / 2,
+            y: stageCenter.y - imageHeight / 2,
+            width: imageWidth,
+            height: imageHeight,
+            rotation: 0,
+            properties: {
+              imageUrl: result.url,
+              imageStoragePath: result.storagePath,
+              aspectRatio: result.aspectRatio
+            },
+            layer_index: elements.length,
+            created_by: (user as { id: string } | null)?.id || ''
+          }
+
+          const { data, error } = await supabase
+            .from('elements')
+            .insert(newElement)
+            .select()
+            .single()
+
+          if (error) throw error
+          addElement(data)
+          setSelectedElementIds([data.id])
+          setActiveTool('select') // Switch back to select tool
+        } catch (error) {
+          console.error('Error uploading image:', error)
+          alert('Failed to upload image. Please try again.')
+        }
+      }
+    }
+    input.click()
   }
 
   // Duplicate selected elements
@@ -454,6 +657,11 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       key: 's',
       callback: () => handleToolChange('sticky_note'),
       description: 'Sticky note tool'
+    },
+    {
+      key: 'i',
+      callback: () => handleToolChange('image'),
+      description: 'Image tool'
     },
     // Element actions
     {
@@ -662,6 +870,14 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [stageScale])
+
+  // Handle clipboard paste events
+  useEffect(() => {
+    document.addEventListener('paste', handleClipboardPaste)
+    return () => {
+      document.removeEventListener('paste', handleClipboardPaste)
+    }
+  }, [handleClipboardPaste])
 
   async function loadElements() {
     try {
@@ -1580,6 +1796,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     }
   }
 
+
   function renderElement(element: WhiteboardElement) {
     const isSelected = selectedElementIds.includes(element.id)
     const props = element.properties as ElementProperties || {}
@@ -1599,6 +1816,10 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       rotation: element.rotation || 0,
       draggable: activeTool === 'select',
       onClick: (e: Konva.KonvaEventObject<MouseEvent>) => handleElementClick(element.id, e),
+      onDblClick: () => {
+        // For images, double-click could open properties or do nothing for now
+        console.log('Image double-clicked:', element.id)
+      },
       onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => handleElementDrag(element.id, e.target.attrs),
       onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => handleElementDragEnd(element.id, e.target.attrs),
       onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>) => handleElementRightClick(element.id, e),
@@ -1699,6 +1920,14 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
             pointerWidth={8}
           />
         )
+      case 'image':
+        return (
+          <ImageElement
+            key={element.id}
+            element={element}
+            baseProps={baseProps}
+          />
+        )
       default:
         return null
     }
@@ -1710,7 +1939,8 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     { type: 'circle', icon: CircleIcon, label: 'Circle' },
     { type: 'text', icon: Type, label: 'Text' },
     { type: 'arrow', icon: ArrowRight, label: 'Arrow' },
-    { type: 'sticky_note', icon: StickyNote, label: 'Sticky Note' }
+    { type: 'sticky_note', icon: StickyNote, label: 'Sticky Note' },
+    { type: 'image', icon: Image, label: 'Image' }
   ] as const
 
   // Render left panel
@@ -1729,7 +1959,8 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
                 circle: 'C',
                 text: 'T',
                 arrow: 'A',
-                sticky_note: 'S'
+                sticky_note: 'S',
+                image: 'I'
               }
               
               return (
