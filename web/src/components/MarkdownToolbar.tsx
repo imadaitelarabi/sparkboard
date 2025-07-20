@@ -54,14 +54,14 @@ export default function MarkdownToolbar({ onInsertFormatting, isVisible }: Markd
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs text-purple-700 dark:text-purple-300 font-medium">Markdown</span>
+      <span className="text-xs text-primary font-medium">Rich Text</span>
       <div className="flex gap-1">
         {toolbarButtons.map(({ icon: Icon, label, onClick, title }) => (
           <button
             key={label}
             onClick={onClick}
             onMouseDown={(e) => e.preventDefault()} // Prevent focus loss
-            className="px-2 py-1 text-xs rounded transition-colors bg-white dark:bg-gray-800 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-800/50 border border-purple-200 dark:border-purple-700"
+            className="px-2 py-1 text-xs rounded transition-colors bg-card border border-border text-primary hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             title={title}
           >
             <Icon className="h-3 w-3" />

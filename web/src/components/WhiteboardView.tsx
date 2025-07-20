@@ -44,9 +44,7 @@ import CreateTaskModal from './CreateTaskModal'
 import InputModal from './InputModal'
 import MarkdownEditModal from './MarkdownEditModal'
 import ThemeToggle from './ThemeToggle'
-import MarkdownText from './MarkdownText'
-import MarkdownToolbar from './MarkdownToolbar'
-import InlineMarkdownEditor from './InlineMarkdownEditor'
+import TiptapKonvaText from './TiptapKonvaText'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useRealtimeSync } from '@/hooks/useRealtimeSync'
 import { usePresence } from '@/hooks/usePresence'
@@ -411,7 +409,6 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
   const [editingElement, setEditingElement] = useState<{ id: string; text: string } | null>(null)
   const [editingMarkdownElement, setEditingMarkdownElement] = useState<{ id: string; text: string } | null>(null)
   const [inlineEditingElement, setInlineEditingElement] = useState<string | null>(null)
-  const [insertFormattingFn, setInsertFormattingFn] = useState<((before: string, after?: string) => void) | null>(null)
   const [selectedColor, setSelectedColor] = useState<ElementColorKey>('primary')
   const [customColor, setCustomColor] = useState('#6366f1')
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; elementId: string } | null>(null)
@@ -1477,7 +1474,7 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
         fill: type === 'text' ? (fillColor || 'var(--color-foreground)') : (fillColor || (type === 'sticky_note' ? '#fef3c7' : '#6366f1')),
         stroke: type === 'text' ? '' : (strokeColor || '#334155'),
         strokeWidth: type === 'text' ? 0 : 2,
-        text: type === 'text' ? '# Markdown Text\n\nDouble click to edit\n\n- **Bold text**\n- *Italic text*\n- ***Bold italic***' : (type === 'sticky_note' ? 'Double click to edit' : ''),
+        text: type === 'text' ? '<h1>Rich Text</h1><p>Double click to edit</p><ul><li><strong>Bold text</strong></li><li><em>Italic text</em></li><li><strong><em>Bold italic</em></strong></li></ul>' : (type === 'sticky_note' ? 'Double click to edit' : ''),
         fontSize: type === 'text' ? 16 : undefined,
         fontWeight: type === 'text' ? 'normal' : undefined,
         colorKey, // Store the theme color key for future reference
@@ -2677,9 +2674,9 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
         )
       case 'text':
         return (
-          <MarkdownText
+          <TiptapKonvaText
             key={element.id}
-            text={(props.text as string) || '# Markdown Text\n\nDouble click to edit\n\n- **Bold text**\n- *Italic text*\n- ***Bold italic***'}
+            text={(props.text as string) || '<h1>Rich Text</h1><p>Double click to edit</p><ul><li><strong>Bold text</strong></li><li><em>Italic text</em></li><li><strong><em>Bold italic</em></strong></li></ul>'}
             x={element.x || 0}
             y={element.y || 0}
             width={element.width || 200}
@@ -2690,12 +2687,19 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
             align="left"
             verticalAlign="top"
             onClick={(e: Konva.KonvaEventObject<MouseEvent>) => handleElementClick(element.id, e)}
-            onDblClick={() => {
-              if (!isReadOnly) {
-                setInlineEditingElement(element.id)
-              }
+            isEditing={inlineEditingElement === element.id}
+            onTextSave={(newText: string) => {
+              updateElement(element.id, { 
+                properties: { 
+                  ...props, 
+                  text: newText 
+                } 
+              })
+              setInlineEditingElement(null)
             }}
+            onEditingCancel={() => setInlineEditingElement(null)}
             draggable={activeTool === 'select' && inlineEditingElement !== element.id}
+            scale={stageScale}
             onDragStart={() => handleElementDragStart(element.id)}
             onDragMove={(e: Konva.KonvaEventObject<DragEvent>) => handleElementDrag(element.id, e.target.attrs)}
             onDragEnd={(e: Konva.KonvaEventObject<DragEvent>) => handleElementDragEnd(element.id, e.target.attrs)}
@@ -2703,14 +2707,6 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
               if (!isReadOnly) {
                 handleElementRightClick(element.id, e)
               }
-            }}
-            isEditing={inlineEditingElement === element.id}
-            onTextSave={(newText: string) => {
-              updateElementProperties(element.id, { text: newText })
-              setInlineEditingElement(null)
-            }}
-            onEditingCancel={() => {
-              setInlineEditingElement(null)
             }}
           />
         )
@@ -3025,15 +3021,6 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
 
               return (
                 <div className="flex items-center gap-4 px-3 py-1 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
-                  {/* Markdown Toolbar - only show during inline editing */}
-                  <MarkdownToolbar 
-                    isVisible={!!inlineEditingElement}
-                    onInsertFormatting={(before: string, after?: string) => {
-                      if (insertFormattingFn) {
-                        insertFormattingFn(before, after)
-                      }
-                    }}
-                  />
                   
                   {/* Opacity and Stroke Style - only show for shapes */}
                   {nonTextElements.length > 0 && (
@@ -3492,48 +3479,6 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
         </div>
       )}
 
-      {/* Inline Markdown Editor */}
-      {inlineEditingElement && (() => {
-        const element = elements.find(el => el.id === inlineEditingElement)
-        if (!element) return null
-        
-        const props = element.properties as ElementProperties
-        const stageRect = stageRef.current?.content?.getBoundingClientRect()
-        
-        if (!stageRect) return null
-        
-        // Calculate absolute position on screen
-        const absoluteX = stageRect.left + (element.x || 0) * stageScale + stagePos.x
-        const absoluteY = stageRect.top + (element.y || 0) * stageScale + stagePos.y
-        const scaledWidth = (element.width || 200) * stageScale
-        const scaledHeight = (element.height || 100) * stageScale
-        
-        return (
-          <InlineMarkdownEditor
-            x={absoluteX}
-            y={absoluteY}
-            width={scaledWidth}
-            height={scaledHeight}
-            fontSize={(props.fontSize as number || 16) * stageScale}
-            fontFamily="Arial, sans-serif"
-            fill={props.fill as string || 'var(--color-foreground)'}
-            initialValue={props.text as string || ''}
-            isEditing={true}
-            onSave={(newText: string) => {
-              updateElementProperties(element.id, { text: newText })
-              setInlineEditingElement(null)
-              setInsertFormattingFn(null)
-            }}
-            onCancel={() => {
-              setInlineEditingElement(null)
-              setInsertFormattingFn(null)
-            }}
-            onReady={(insertFn) => {
-              setInsertFormattingFn(() => insertFn)
-            }}
-          />
-        )
-      })()}
 
     </div>
   )

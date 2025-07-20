@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import Modal from './Modal'
+import TiptapEditor, { TiptapEditorRef } from './TiptapEditor'
 import { Eye, Edit, FileText } from 'lucide-react'
 
 interface MarkdownEditModalProps {
@@ -25,28 +26,31 @@ export default function MarkdownEditModal({
   submitText = 'Update'
 }: MarkdownEditModalProps) {
   const [value, setValue] = useState(defaultValue)
+  const [previewContent, setPreviewContent] = useState(defaultValue)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit')
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const editorRef = useRef<TiptapEditorRef>(null)
 
   useEffect(() => {
     if (isOpen) {
       setValue(defaultValue)
+      setPreviewContent(defaultValue)
       setActiveTab('edit')
-      // Focus the textarea after modal animation
+      // Focus the editor after modal animation
       setTimeout(() => {
-        textareaRef.current?.focus()
+        editorRef.current?.focus()
       }, 150)
     }
   }, [isOpen, defaultValue])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!value.trim()) return
+    const content = editorRef.current?.getMarkdown() || ''
+    if (!content.trim()) return
 
     setLoading(true)
     try {
-      onSubmit(value.trim())
+      onSubmit(content.trim())
       onClose()
     } catch (error) {
       console.error('Error in markdown edit modal submit:', error)
@@ -61,41 +65,9 @@ export default function MarkdownEditModal({
     }
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Tab') {
-      e.preventDefault()
-      const textarea = e.currentTarget as HTMLTextAreaElement
-      const start = textarea.selectionStart
-      const end = textarea.selectionEnd
-      const newValue = value.substring(0, start) + '  ' + value.substring(end)
-      setValue(newValue)
-      
-      // Reset cursor position
-      setTimeout(() => {
-        textarea.selectionStart = textarea.selectionEnd = start + 2
-      }, 0)
-    }
-  }
-
   // Insert markdown formatting
   function insertFormatting(before: string, after: string = '') {
-    const textarea = textareaRef.current
-    if (!textarea) return
-
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const selectedText = value.substring(start, end)
-    const newText = before + selectedText + after
-    const newValue = value.substring(0, start) + newText + value.substring(end)
-    
-    setValue(newValue)
-    
-    // Set cursor position
-    setTimeout(() => {
-      const newPosition = selectedText ? end + before.length + after.length : start + before.length
-      textarea.selectionStart = textarea.selectionEnd = newPosition
-      textarea.focus()
-    }, 0)
+    editorRef.current?.insertFormatting(before, after)
   }
 
   return (
@@ -193,24 +165,21 @@ export default function MarkdownEditModal({
         <div className="flex-1 p-6">
           {activeTab === 'edit' ? (
             <div className="h-full">
-              <textarea
-                ref={textareaRef}
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                placeholder={`# Markdown Text
-
-Use markdown syntax for formatting:
-
-- **Bold text**
-- *Italic text*
-- # Headers
-- Lists
-- \`Code\`
-
-And much more!`}
-                className="w-full h-full px-3 py-2 bg-input border border-border rounded-md focus:ring-2 focus:ring-ring focus:border-transparent text-sm resize-none font-mono"
-                disabled={loading}
-                onKeyDown={handleKeyDown}
+              <TiptapEditor
+                ref={editorRef}
+                content={value}
+                onChange={(htmlContent) => {
+                  setValue(htmlContent)
+                  // Also update a markdown version for preview
+                  if (editorRef.current) {
+                    const markdownContent = editorRef.current.getMarkdown()
+                    // We'll use this for preview
+                    setPreviewContent(markdownContent)
+                  }
+                }}
+                placeholder="Start typing with rich text formatting..."
+                className="h-full"
+                editable={!loading}
               />
             </div>
           ) : (
@@ -233,7 +202,7 @@ And much more!`}
                     em: ({ children }) => <em className="italic">{children}</em>
                   }}
                 >
-                  {value || '*Nothing to preview*'}
+                  {previewContent || '*Nothing to preview*'}
                 </ReactMarkdown>
               </div>
             </div>
@@ -244,7 +213,7 @@ And much more!`}
         <div className="flex justify-between items-center gap-3 p-6 border-t border-border bg-card">
           <div className="text-xs text-muted-foreground">
             <FileText className="h-3 w-3 inline mr-1" />
-            Supports GitHub Flavored Markdown
+            Rich text editor with markdown support
           </div>
           <div className="flex gap-3">
             <button
