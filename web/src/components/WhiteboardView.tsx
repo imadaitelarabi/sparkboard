@@ -365,6 +365,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     setElements, 
     addElement, 
     updateElement, 
+    updateElementSilent,
     removeElement,
     selectedElementIds,
     setSelectedElementIds,
@@ -374,7 +375,13 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     isCreateTaskModalOpen,
     setIsCreateTaskModalOpen,
     navigationContext,
-    setNavigationContext
+    setNavigationContext,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    clearHistory,
+    saveToHistory
   } = useAppStore()
 
   const [activeTool, setActiveTool] = useState<ToolType>('select')
@@ -396,6 +403,8 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     originalBounds: { x: number; y: number; width: number; height: number } | null;
   }>({ isResizing: false, elementId: null, handleType: null, startPointer: null, originalBounds: null })
   const [showComingSoonModal, setShowComingSoonModal] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const [draggedElements, setDraggedElements] = useState<Set<string>>(new Set())
   
   // Zoom state for better control
   const [isZooming, setIsZooming] = useState(false)
@@ -814,6 +823,37 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       },
       description: 'Duplicate selected elements',
       preventDefault: true
+    },
+    // Undo/Redo shortcuts
+    {
+      key: 'z',
+      ctrlKey: true,
+      callback: (event) => {
+        if (!event.shiftKey) {
+          undo()
+        }
+      },
+      description: 'Undo',
+      preventDefault: true
+    },
+    {
+      key: 'z',
+      ctrlKey: true,
+      shiftKey: true,
+      callback: () => {
+        redo()
+      },
+      description: 'Redo (Ctrl+Shift+Z)',
+      preventDefault: true
+    },
+    {
+      key: 'y',
+      ctrlKey: true,
+      callback: () => {
+        redo()
+      },
+      description: 'Redo (Ctrl+Y)',
+      preventDefault: true
     }
   ])
 
@@ -936,6 +976,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
 
       if (error) throw error
       setElements(data || [])
+      clearHistory() // Clear history when loading new board
     } catch (error) {
       console.error('Error loading elements:', error)
     }
@@ -1689,12 +1730,36 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     })
   }
 
+  function handleElementDragStart(elementId: string) {
+    // Save to history only once at the start of drag operation
+    if (!isDragging) {
+      saveToHistory()
+      setIsDragging(true)
+      setDraggedElements(new Set([elementId]))
+    } else {
+      // Add to dragged elements if multi-select drag
+      setDraggedElements(prev => new Set([...prev, elementId]))
+    }
+  }
+  
   function handleElementDrag(elementId: string, newAttrs: { x: number; y: number }) {
-    updateElement(elementId, { x: newAttrs.x, y: newAttrs.y })
+    // Update position without saving to history during drag
+    updateElementSilent(elementId, { x: newAttrs.x, y: newAttrs.y })
   }
 
   function handleElementDragEnd(elementId: string, newAttrs: { x: number; y: number }) {
+    // Update database and reset drag state
     updateElementInDB(elementId, { x: newAttrs.x, y: newAttrs.y })
+    
+    // Reset drag state when all dragged elements are done
+    setDraggedElements(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(elementId)
+      if (newSet.size === 0) {
+        setIsDragging(false)
+      }
+      return newSet
+    })
   }
 
   function handleWheel(e: Konva.KonvaEventObject<WheelEvent>) {
@@ -1857,8 +1922,8 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       }
       
       
-      // Update element locally for smooth interaction
-      updateElement(resizeState.elementId, newAttrs)
+      // Update element locally for smooth interaction without saving to history
+      updateElementSilent(resizeState.elementId, newAttrs)
       return
     }
     
@@ -2042,6 +2107,9 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
           e.evt.preventDefault()
           e.evt.stopPropagation()
           
+          // Save to history before starting resize
+          saveToHistory()
+          
           // Store initial state for proper offset calculation
           setResizeState({
             isResizing: true,
@@ -2092,6 +2160,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
         // For images, double-click could open properties or do nothing for now
         console.log('Image double-clicked:', element.id)
       },
+      onDragStart: () => handleElementDragStart(element.id),
       onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => handleElementDrag(element.id, e.target.attrs),
       onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => handleElementDragEnd(element.id, e.target.attrs),
       onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>) => handleElementRightClick(element.id, e),
@@ -2168,6 +2237,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
               setInlineEditingElement(element.id)
             }}
             draggable={activeTool === 'select' && inlineEditingElement !== element.id}
+            onDragStart={() => handleElementDragStart(element.id)}
             onDragMove={(e: Konva.KonvaEventObject<DragEvent>) => handleElementDrag(element.id, e.target.attrs)}
             onDragEnd={(e: Konva.KonvaEventObject<DragEvent>) => handleElementDragEnd(element.id, e.target.attrs)}
             onContextMenu={(e: Konva.KonvaEventObject<MouseEvent>) => handleElementRightClick(element.id, e)}

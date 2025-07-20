@@ -8,6 +8,17 @@ type Element = Tables['elements']['Row']
 type Task = Tables['tasks']['Row']
 type TaskCategory = Tables['task_categories']['Row']
 
+interface HistoryState {
+  elements: Element[]
+  selectedElementIds: string[]
+}
+
+interface HistoryManager {
+  undoStack: HistoryState[]
+  redoStack: HistoryState[]
+  maxHistorySize: number
+}
+
 interface AppState {
   // Current user and auth
   user: unknown | null
@@ -34,7 +45,17 @@ interface AppState {
   setElements: (elements: Element[]) => void
   addElement: (element: Element) => void
   updateElement: (id: string, updates: Partial<Element>) => void
+  updateElementSilent: (id: string, updates: Partial<Element>) => void // Update without history
   removeElement: (id: string) => void
+
+  // History management
+  history: HistoryManager
+  saveToHistory: () => void
+  undo: () => void
+  redo: () => void
+  canUndo: () => boolean
+  canRedo: () => boolean
+  clearHistory: () => void
 
   // Tasks
   tasks: Task[]
@@ -65,7 +86,7 @@ interface AppState {
   setIsCreateTaskModalOpen: (open: boolean) => void
 }
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   // Auth
   user: null,
   setUser: (user) => set({ user }),
@@ -86,20 +107,125 @@ export const useAppStore = create<AppState>((set) => ({
   currentBoard: null,
   setCurrentBoard: (board) => set({ currentBoard: board }),
 
+  // History management
+  history: {
+    undoStack: [],
+    redoStack: [],
+    maxHistorySize: 50
+  },
+
+  saveToHistory: () => {
+    const state = get()
+    const currentState: HistoryState = {
+      elements: JSON.parse(JSON.stringify(state.elements)),
+      selectedElementIds: [...state.selectedElementIds]
+    }
+    
+    set((state) => {
+      const newUndoStack = [...state.history.undoStack, currentState]
+      if (newUndoStack.length > state.history.maxHistorySize) {
+        newUndoStack.shift()
+      }
+      
+      return {
+        history: {
+          ...state.history,
+          undoStack: newUndoStack,
+          redoStack: [] // Clear redo stack when new action is performed
+        }
+      }
+    })
+  },
+
+  undo: () => {
+    const state = get()
+    if (state.history.undoStack.length === 0) return
+
+    const currentState: HistoryState = {
+      elements: JSON.parse(JSON.stringify(state.elements)),
+      selectedElementIds: [...state.selectedElementIds]
+    }
+
+    const previousState = state.history.undoStack[state.history.undoStack.length - 1]
+    const newUndoStack = state.history.undoStack.slice(0, -1)
+    const newRedoStack = [...state.history.redoStack, currentState]
+
+    set({
+      elements: previousState.elements,
+      selectedElementIds: previousState.selectedElementIds,
+      history: {
+        ...state.history,
+        undoStack: newUndoStack,
+        redoStack: newRedoStack
+      }
+    })
+  },
+
+  redo: () => {
+    const state = get()
+    if (state.history.redoStack.length === 0) return
+
+    const currentState: HistoryState = {
+      elements: JSON.parse(JSON.stringify(state.elements)),
+      selectedElementIds: [...state.selectedElementIds]
+    }
+
+    const nextState = state.history.redoStack[state.history.redoStack.length - 1]
+    const newRedoStack = state.history.redoStack.slice(0, -1)
+    const newUndoStack = [...state.history.undoStack, currentState]
+
+    set({
+      elements: nextState.elements,
+      selectedElementIds: nextState.selectedElementIds,
+      history: {
+        ...state.history,
+        undoStack: newUndoStack,
+        redoStack: newRedoStack
+      }
+    })
+  },
+
+  canUndo: () => get().history.undoStack.length > 0,
+  canRedo: () => get().history.redoStack.length > 0,
+  
+  clearHistory: () => set((state) => ({
+    history: {
+      ...state.history,
+      undoStack: [],
+      redoStack: []
+    }
+  })),
+
   // Elements
   elements: [],
   setElements: (elements) => set({ elements }),
-  addElement: (element) => set((state) => ({ 
-    elements: [...state.elements, element] 
-  })),
-  updateElement: (id, updates) => set((state) => ({
-    elements: state.elements.map(el => 
-      el.id === id ? { ...el, ...updates } : el
-    )
-  })),
-  removeElement: (id) => set((state) => ({
-    elements: state.elements.filter(el => el.id !== id)
-  })),
+  addElement: (element) => {
+    get().saveToHistory()
+    set((state) => ({ 
+      elements: [...state.elements, element] 
+    }))
+  },
+  updateElement: (id, updates) => {
+    get().saveToHistory()
+    set((state) => ({
+      elements: state.elements.map(el => 
+        el.id === id ? { ...el, ...updates } : el
+      )
+    }))
+  },
+  updateElementSilent: (id, updates) => {
+    set((state) => ({
+      elements: state.elements.map(el => 
+        el.id === id ? { ...el, ...updates } : el
+      )
+    }))
+  },
+  removeElement: (id) => {
+    get().saveToHistory()
+    set((state) => ({
+      elements: state.elements.filter(el => el.id !== id)
+    }))
+  },
 
   // Tasks
   tasks: [],

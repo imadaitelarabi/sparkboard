@@ -18,6 +18,7 @@ interface MarkdownTextProps {
   onClick?: (e: Konva.KonvaEventObject<MouseEvent>) => void
   onDblClick?: (e: Konva.KonvaEventObject<MouseEvent>) => void
   draggable?: boolean
+  onDragStart?: () => void
   onDragMove?: (e: Konva.KonvaEventObject<DragEvent>) => void
   onDragEnd?: (e: Konva.KonvaEventObject<DragEvent>) => void
   onContextMenu?: (e: Konva.KonvaEventObject<MouseEvent>) => void
@@ -140,6 +141,7 @@ export default function MarkdownText({
   onClick,
   onDblClick,
   draggable = false,
+  onDragStart,
   onDragMove,
   onDragEnd,
   onContextMenu,
@@ -215,6 +217,7 @@ export default function MarkdownText({
       onClick={onClick}
       onDblClick={onDblClick}
       draggable={draggable && !isEditing}
+      onDragStart={onDragStart}
       onDragMove={onDragMove}
       onDragEnd={onDragEnd}
       onContextMenu={onContextMenu}
