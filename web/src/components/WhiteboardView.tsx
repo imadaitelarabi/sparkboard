@@ -20,8 +20,12 @@ import {
   Trash2,
   Plus,
   Copy,
-  Layers,
-  Image
+  Image,
+  ArrowUp,
+  ArrowDown,
+  CornerRightUp,
+  CornerRightDown,
+  ClipboardCopy
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { imageUploadService } from '@/lib/image-upload'
@@ -69,7 +73,7 @@ const ImageElement = React.memo(({ element, baseProps }: {
     onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>) => void
     stroke: string
     strokeWidth: number
-    dash: number[]
+    dash?: number[]
     opacity: number
   }
 }) => {
@@ -383,7 +387,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   const [selectedColor, setSelectedColor] = useState<ElementColorKey>('primary')
   const [customColor, setCustomColor] = useState('#6366f1')
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; elementId: string } | null>(null)
-  const [clipboard, setClipboard] = useState<Element[]>([])
+  const [copiedElements, setCopiedElements] = useState<WhiteboardElement[]>([])
   const [resizeState, setResizeState] = useState<{
     isResizing: boolean;
     elementId: string | null;
@@ -427,8 +431,9 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
 
   // Copy selected elements to clipboard
   const copyElements = () => {
+    if (selectedElementIds.length === 0) return
     const selectedElements = elements.filter(el => selectedElementIds.includes(el.id))
-    setClipboard(selectedElements)
+    setCopiedElements(selectedElements)
   }
 
   // Handle pasting images from system clipboard
@@ -490,12 +495,12 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
 
   // Paste elements from clipboard
   const pasteElements = async () => {
-    if (clipboard.length === 0) return
+    if (copiedElements.length === 0) return
 
     const offset = 20 // Offset to avoid pasting exactly on top
     const newElements = []
 
-    for (const element of clipboard) {
+    for (const element of copiedElements) {
       const newElement: Omit<Element, 'id' | 'created_at' | 'updated_at'> = {
         board_id: board.id,
         type: element.type,
@@ -847,6 +852,9 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (contextMenu) {
+        // Don't close on right-click events or Mac Ctrl+click
+        if (event.button === 2 || event.ctrlKey) return
+        
         const target = event.target
         if (target instanceof Element && !target.closest('.context-menu')) {
           setContextMenu(null)
@@ -858,7 +866,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [contextMenu])
 
-  // Keyboard shortcuts for zoom
+  // Keyboard shortcuts for zoom and context menu
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
@@ -881,13 +889,34 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
           setStagePos({ x: 0, y: 0 })
         }
       }
+      
+      // Context menu shortcut for accessibility and Mac users
+      if (event.key === 'F10' && event.shiftKey && selectedElementIds.length > 0) {
+        event.preventDefault()
+        // Show context menu at center of first selected element
+        const firstElement = elements.find(el => el.id === selectedElementIds[0])
+        if (firstElement) {
+          const centerX = (firstElement.x || 0) + (firstElement.width || 0) / 2
+          const centerY = (firstElement.y || 0) + (firstElement.height || 0) / 2
+          
+          // Convert to screen coordinates
+          const screenX = centerX * stageScale + stagePos.x + 256 // Account for left panel
+          const screenY = centerY * stageScale + stagePos.y + 140 // Account for header
+          
+          setContextMenu({
+            x: screenX,
+            y: screenY,
+            elementId: firstElement.id
+          })
+        }
+      }
     }
     
     document.addEventListener('keydown', handleKeyDown)
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [stageScale])
+  }, [stageScale, selectedElementIds, elements, stagePos])
 
   // Handle clipboard paste events
   useEffect(() => {
@@ -1259,6 +1288,84 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   }
   
   
+  // Layer management functions
+  function sendToBack() {
+    if (selectedElementIds.length === 0) return
+    
+    // Find the minimum layer index among selected elements
+    const selectedElements = elements.filter(el => selectedElementIds.includes(el.id))
+    const minSelectedLayer = Math.min(...selectedElements.map(el => el.layer_index || 0))
+    
+    // Move other elements up to make room at the bottom
+    elements.forEach(element => {
+      if (!selectedElementIds.includes(element.id) && (element.layer_index || 0) < minSelectedLayer) {
+        updateElementInDB(element.id, { layer_index: (element.layer_index || 0) + selectedElementIds.length })
+      }
+    })
+    
+    // Move selected elements to the back
+    selectedElementIds.forEach((id, index) => {
+      updateElementInDB(id, { layer_index: index })
+    })
+  }
+  
+  function sendBackward() {
+    if (selectedElementIds.length === 0) return
+    
+    selectedElementIds.forEach(id => {
+      const element = elements.find(el => el.id === id)
+      if (element && (element.layer_index || 0) > 0) {
+        const newLayerIndex = (element.layer_index || 0) - 1
+        
+        // Find element that currently has this layer index and swap
+        const elementToSwap = elements.find(el => 
+          !selectedElementIds.includes(el.id) && (el.layer_index || 0) === newLayerIndex
+        )
+        
+        if (elementToSwap) {
+          updateElementInDB(elementToSwap.id, { layer_index: element.layer_index || 0 })
+        }
+        
+        updateElementInDB(id, { layer_index: newLayerIndex })
+      }
+    })
+  }
+  
+  function bringForward() {
+    if (selectedElementIds.length === 0) return
+    
+    const maxLayerIndex = Math.max(...elements.map(el => el.layer_index || 0))
+    
+    selectedElementIds.forEach(id => {
+      const element = elements.find(el => el.id === id)
+      if (element && (element.layer_index || 0) < maxLayerIndex) {
+        const newLayerIndex = (element.layer_index || 0) + 1
+        
+        // Find element that currently has this layer index and swap
+        const elementToSwap = elements.find(el => 
+          !selectedElementIds.includes(el.id) && (el.layer_index || 0) === newLayerIndex
+        )
+        
+        if (elementToSwap) {
+          updateElementInDB(elementToSwap.id, { layer_index: element.layer_index || 0 })
+        }
+        
+        updateElementInDB(id, { layer_index: newLayerIndex })
+      }
+    })
+  }
+  
+  function bringToFront() {
+    if (selectedElementIds.length === 0) return
+    
+    const maxLayerIndex = Math.max(...elements.map(el => el.layer_index || 0))
+    
+    selectedElementIds.forEach((id, index) => {
+      updateElementInDB(id, { layer_index: maxLayerIndex + 1 + index })
+    })
+  }
+  
+
   // Render context menu
   function renderContextMenu() {
     if (!contextMenu) return null
@@ -1267,22 +1374,64 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     
     return (
       <div
-        className="context-menu fixed z-50 bg-card border border-border rounded-lg shadow-xl py-2 animate-in fade-in zoom-in-95 duration-150"
+        className="context-menu fixed z-50 rounded-lg py-2 px-1 animate-in fade-in zoom-in-95 duration-150"
         style={{
           left: `${contextMenu.x}px`,
           top: `${contextMenu.y}px`,
-          minWidth: '160px'
+          minWidth: '200px',
+          background: 'var(--color-card)',
+          border: '1px solid var(--color-border)',
+          boxShadow: 'var(--shadow-floating)'
         }}
       >
+        {/* Task Creation */}
         <button
           onClick={() => {
             setIsCreateTaskModalOpen(true)
             setContextMenu(null)
           }}
-          className="w-full flex items-center gap-3 px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"
+          className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-all"
+          style={{
+            color: 'var(--color-card-foreground)',
+            transitionDuration: 'var(--duration-normal)'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)'
+            e.currentTarget.style.opacity = '0.8'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.opacity = '1'
+          }}
         >
           <Plus className="h-4 w-4" />
           Create Task{selectedCount > 1 ? ` (${selectedCount})` : ''}
+        </button>
+        
+        <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
+        
+        {/* Copy and Duplicate */}
+        <button
+          onClick={() => {
+            copyElements()
+            setContextMenu(null)
+          }}
+          className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-all"
+          style={{
+            color: 'var(--color-card-foreground)',
+            transitionDuration: 'var(--duration-normal)'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(14, 165, 233, 0.1)'
+            e.currentTarget.style.opacity = '0.8'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.opacity = '1'
+          }}
+        >
+          <ClipboardCopy className="h-4 w-4" />
+          Copy{selectedCount > 1 ? ` (${selectedCount})` : ''}
         </button>
         
         <button
@@ -1290,35 +1439,141 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
             duplicateElements()
             setContextMenu(null)
           }}
-          className="w-full flex items-center gap-3 px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"
+          className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-all"
+          style={{
+            color: 'var(--color-card-foreground)',
+            transitionDuration: 'var(--duration-normal)'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(14, 165, 233, 0.1)'
+            e.currentTarget.style.opacity = '0.8'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.opacity = '1'
+          }}
         >
           <Copy className="h-4 w-4" />
           Duplicate{selectedCount > 1 ? ` (${selectedCount})` : ''}
         </button>
         
+        <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
+        
+        {/* Layer Management */}
         <button
           onClick={() => {
-            // Move to front
-            selectedElementIds.forEach(id => {
-              updateElementInDB(id, { layer_index: elements.length })
-            })
+            bringToFront()
             setContextMenu(null)
           }}
-          className="w-full flex items-center gap-3 px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"
+          className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-all"
+          style={{
+            color: 'var(--color-card-foreground)',
+            transitionDuration: 'var(--duration-normal)'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(16, 185, 129, 0.1)'
+            e.currentTarget.style.opacity = '0.8'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.opacity = '1'
+          }}
         >
-          <Layers className="h-4 w-4" />
+          <CornerRightUp className="h-4 w-4" />
           Bring to Front
         </button>
         
-        <div className="border-t border-border my-1" />
+        <button
+          onClick={() => {
+            bringForward()
+            setContextMenu(null)
+          }}
+          className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-all"
+          style={{
+            color: 'var(--color-card-foreground)',
+            transitionDuration: 'var(--duration-normal)'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(16, 185, 129, 0.1)'
+            e.currentTarget.style.opacity = '0.8'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.opacity = '1'
+          }}
+        >
+          <ArrowUp className="h-4 w-4" />
+          Bring Forward
+        </button>
         
+        <button
+          onClick={() => {
+            sendBackward()
+            setContextMenu(null)
+          }}
+          className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-all"
+          style={{
+            color: 'var(--color-card-foreground)',
+            transitionDuration: 'var(--duration-normal)'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(16, 185, 129, 0.1)'
+            e.currentTarget.style.opacity = '0.8'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.opacity = '1'
+          }}
+        >
+          <ArrowDown className="h-4 w-4" />
+          Send Backward
+        </button>
+        
+        <button
+          onClick={() => {
+            sendToBack()
+            setContextMenu(null)
+          }}
+          className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-all"
+          style={{
+            color: 'var(--color-card-foreground)',
+            transitionDuration: 'var(--duration-normal)'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(16, 185, 129, 0.1)'
+            e.currentTarget.style.opacity = '0.8'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.opacity = '1'
+          }}
+        >
+          <CornerRightDown className="h-4 w-4" />
+          Send to Back
+        </button>
+        
+        <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
+        
+        {/* Delete */}
         <button
           onClick={() => {
             selectedElementIds.forEach(id => deleteElement(id))
             setContextMenu(null)
             clearSelection()
           }}
-          className="w-full flex items-center gap-3 px-3 py-2 text-sm text-destructive hover:bg-destructive-50 transition-colors"
+          className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-all"
+          style={{
+            color: 'var(--color-destructive-500)',
+            transitionDuration: 'var(--duration-normal)'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'
+            e.currentTarget.style.opacity = '0.8'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.opacity = '1'
+          }}
         >
           <Trash2 className="h-4 w-4" />
           Delete{selectedCount > 1 ? ` (${selectedCount})` : ''}
@@ -1396,6 +1651,12 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   function handleElementClick(elementId: string, e: Konva.KonvaEventObject<MouseEvent>) {
     e.cancelBubble = true
     
+    // Check for Mac trackpad two-finger tap or right-click
+    if (e.evt.button === 2 || e.evt.ctrlKey) {
+      handleElementRightClick(elementId, e)
+      return
+    }
+    
     // Close context menu on regular click
     setContextMenu(null)
     
@@ -1417,20 +1678,13 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       setSelectedElementIds([elementId])
     }
     
-    // Get the mouse position relative to the stage
-    const stage = e.target.getStage()
-    if (!stage) return
-    
-    const pointerPosition = stage.getPointerPosition()
-    if (!pointerPosition) return
-    
-    // Convert to screen coordinates
-    const screenX = pointerPosition.x * stageScale + stagePos.x
-    const screenY = pointerPosition.y * stageScale + stagePos.y
+    // Get the mouse position relative to the browser window
+    const clientX = e.evt.clientX
+    const clientY = e.evt.clientY
     
     setContextMenu({
-      x: screenX,
-      y: screenY,
+      x: clientX,
+      y: clientY,
       elementId
     })
   }
@@ -1843,7 +2097,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>) => handleElementRightClick(element.id, e),
       stroke: strokeColor,
       strokeWidth: strokeWidth,
-      dash: dashArray,
+      ...(dashArray && { dash: dashArray }),
       opacity: props.opacity || 1
     }
 
@@ -2334,6 +2588,12 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
           onMouseDown={handleStageMouseDown}
           onMouseMove={handleStageMouseMove}
           onMouseUp={handleStageMouseUp}
+          onContextMenu={(e) => {
+            // Handle stage-level context menu (e.g., for background)
+            e.evt.preventDefault()
+            // For now, just close any existing context menu when right-clicking on empty space
+            setContextMenu(null)
+          }}
           draggable={false}
         >
           <Layer>
