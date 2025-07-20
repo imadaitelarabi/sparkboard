@@ -201,10 +201,15 @@ export default function MarkdownText({
     const tokenWidth = token.text.length * avgCharWidth
     currentX += tokenWidth
     
-    // Wrap to next line if needed (leave some margin)
+    // Only auto-wrap if we don't have explicit line breaks and text exceeds width
+    // This ensures user's intentional line breaks take precedence
     if (currentX > width - padding * 2 - 40) {
-      currentX = 0
-      currentY += baseLineHeight
+      // Check if the next token is a line break - if so, don't auto-wrap
+      const nextToken = tokens[i + 1]
+      if (!nextToken || nextToken.text !== '\n') {
+        currentX = 0
+        currentY += baseLineHeight
+      }
     }
   }
   
