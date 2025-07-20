@@ -1510,7 +1510,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       return []
     }
 
-    const handleSize = 8 / stageScale // Scale handle size with zoom
+    const handleSize = 6 / stageScale // Scale handle size with zoom (reduced from 8 to 6)
     const x = element.x || 0
     const y = element.y || 0
     const width = element.width || 0
@@ -1538,7 +1538,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
         width={handleSize}
         height={handleSize}
         fill="#ffffff"
-        stroke="var(--color-primary-500)"
+        stroke="#6366f1"
         strokeWidth={1.5 / stageScale}
         draggable={false}
         perfectDrawEnabled={false}
@@ -2161,10 +2161,45 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
             {/* Elements */}
             {elements.map(renderElement)}
             
-            {/* Resize handles for selected elements */}
+            {/* Selection borders and resize handles for selected elements */}
             {selectedElementIds.map(elementId => {
               const element = elements.find(el => el.id === elementId)
-              return element ? renderResizeHandles(element) : null
+              if (!element) return null
+              
+              return (
+                <React.Fragment key={`selection-${element.id}`}>
+                  {/* Purple selection border */}
+                  {element.type !== 'circle' && (
+                    <Rect
+                      x={element.x || 0}
+                      y={element.y || 0}
+                      width={element.width || 0}
+                      height={element.height || 0}
+                      rotation={element.rotation || 0}
+                      fill="transparent"
+                      stroke="#6366f1"
+                      strokeWidth={1.5 / stageScale}
+                      dash={[6 / stageScale, 3 / stageScale]}
+                      listening={false}
+                      perfectDrawEnabled={false}
+                    />
+                  )}
+                  {element.type === 'circle' && (
+                    <Circle
+                      x={(element.x || 0) + (element.width || 0) / 2}
+                      y={(element.y || 0) + (element.height || 0) / 2}
+                      radius={(element.width || 0) / 2}
+                      fill="transparent"
+                      stroke="#6366f1"
+                      strokeWidth={1.5 / stageScale}
+                      dash={[6 / stageScale, 3 / stageScale]}
+                      listening={false}
+                      perfectDrawEnabled={false}
+                    />
+                  )}
+                  {renderResizeHandles(element)}
+                </React.Fragment>
+              )
             })}
             
             {/* Selection rectangle */}
