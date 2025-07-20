@@ -13,6 +13,14 @@ type BoardShare = Tables['board_shares']['Row']
 type BoardMember = Tables['board_members']['Row']
 type Invitation = Tables['invitations']['Row']
 
+interface BoardMemberWithProfile extends BoardMember {
+  profile?: {
+    user_id: string
+    email: string | null
+    full_name: string | null
+  }
+}
+
 interface ShareModalProps {
   isOpen: boolean
   onClose: () => void
@@ -29,7 +37,7 @@ export default function ShareModal({ isOpen, onClose, project, boards, currentBo
   const [selectedBoards, setSelectedBoards] = useState<string[]>(currentBoard ? [currentBoard.id] : [])
   const [publicShares, setPublicShares] = useState<BoardShare[]>([])
   const [projectInvitations, setProjectInvitations] = useState<Invitation[]>([])
-  const [boardMembers, setBoardMembers] = useState<BoardMember[]>([])
+  const [boardMembers, setBoardMembers] = useState<BoardMemberWithProfile[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [newShareLevel, setNewShareLevel] = useState<AccessLevel>('view')
   const [shareExpiry, setShareExpiry] = useState<string>('')
@@ -79,7 +87,7 @@ export default function ShareModal({ isOpen, onClose, project, boards, currentBo
               ...member,
               profile: profileMap.get(member.user_id)
             }))
-            setBoardMembers(membersWithProfiles as any)
+            setBoardMembers(membersWithProfiles)
           } else {
             setBoardMembers(members)
           }
