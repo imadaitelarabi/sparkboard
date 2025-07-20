@@ -79,18 +79,30 @@ export default function InvitationPage() {
       // Load resource details based on type
       let resourceData = {}
       if (inviteData.resource_type === 'project') {
-        const { data: project } = await supabase
+        const { data: project, error: projectError } = await supabase
           .from('projects')
           .select('name')
           .eq('id', inviteData.resource_id)
           .single()
+        
+        if (projectError) {
+          console.error('Error loading project:', projectError)
+          setError('The project for this invitation could not be found.')
+          return
+        }
         resourceData = { project }
       } else if (inviteData.resource_type === 'board') {
-        const { data: board } = await supabase
+        const { data: board, error: boardError } = await supabase
           .from('boards')
           .select('name')
           .eq('id', inviteData.resource_id)
           .single()
+        
+        if (boardError) {
+          console.error('Error loading board:', boardError)
+          setError('The board for this invitation could not be found.')
+          return
+        }
         resourceData = { board }
       }
 

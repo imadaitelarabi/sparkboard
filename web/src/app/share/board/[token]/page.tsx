@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import WhiteboardView from '@/components/WhiteboardView'
+import AuthGate from '@/components/AuthGate'
 import { Database } from '@/types/database.types'
 import { Eye, Lock, AlertCircle } from 'lucide-react'
 
@@ -28,14 +29,36 @@ export default function SharedBoardPage() {
   const [passwordRequired, setPasswordRequired] = useState(false)
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [user, setUser] = useState<{ id: string; email: string } | null>(null)
+  const [authChecked, setAuthChecked] = useState(false)
 
   const supabase = createClient()
 
+  const checkAuth = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user?.email) {
+        setUser({ id: user.id, email: user.email })
+      } else {
+        setUser(null)
+      }
+    } catch (error) {
+      console.error('Error checking auth:', error)
+      setUser(null)
+    } finally {
+      setAuthChecked(true)
+    }
+  }
+
   useEffect(() => {
-    if (token) {
+    checkAuth()
+  }, [])
+
+  useEffect(() => {
+    if (token && authChecked) {
       loadSharedBoard()
     }
-  }, [token])
+  }, [token, authChecked])
 
   const loadSharedBoard = async (providedPassword?: string) => {
     try {
@@ -183,6 +206,17 @@ export default function SharedBoardPage() {
 
   if (!boardData) {
     return null
+  }
+
+  // Check if admin access requires authentication
+  if (boardData.share.access_level === 'admin' && !user) {
+    return (
+      <AuthGate
+        resourceName={boardData.board.name}
+        resourceType="board"
+        message="Admin access to this board requires authentication. Please sign in or create an account to continue."
+      />
+    )
   }
 
   return (

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Plus, Search, Calendar, User, FolderOpen, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
@@ -19,6 +20,8 @@ interface TaskWithDetails extends Task {
 }
 
 export default function Dashboard() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
   const { projects, setProjects, user, setUser } = useAppStore()
   const [tasks, setTasks] = useState<TaskWithDetails[]>([])
@@ -72,11 +75,42 @@ export default function Dashboard() {
   useEffect(() => {
     loadData()
 
+    // Check for immediate redirect if user is already authenticated
+    const checkAuthAndRedirect = async () => {
+      const { data: { user: currentUser } } = await supabase.auth.getUser()
+      const redirectUrl = searchParams.get('redirect')
+      
+      if (currentUser && redirectUrl) {
+        try {
+          const decodedUrl = decodeURIComponent(redirectUrl)
+          router.push(decodedUrl)
+          return
+        } catch (error) {
+          console.error('Error redirecting authenticated user:', error)
+        }
+      }
+    }
+    
+    checkAuthAndRedirect()
+
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
         setUser(session.user)
         loadData()
+        
+        // Handle redirect after successful authentication
+        const redirectUrl = searchParams.get('redirect')
+        if (redirectUrl) {
+          try {
+            // Decode and redirect back to the original URL
+            const decodedUrl = decodeURIComponent(redirectUrl)
+            router.push(decodedUrl)
+            return
+          } catch (error) {
+            console.error('Error redirecting after auth:', error)
+          }
+        }
       } else if (event === 'SIGNED_OUT') {
         setUser(null)
         setProjects([])
@@ -85,7 +119,7 @@ export default function Dashboard() {
     })
 
     return () => subscription.unsubscribe()
-  }, [loadData, supabase.auth, setUser, setProjects, setTasks])
+  }, [loadData, supabase.auth, setUser, setProjects, setTasks, searchParams, router])
 
   async function createProject(projectName: string) {
     if (!user || !projectName.trim()) return
