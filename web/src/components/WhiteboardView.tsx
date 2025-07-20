@@ -45,6 +45,7 @@ import MarkdownText from './MarkdownText'
 import MarkdownToolbar from './MarkdownToolbar'
 import InlineMarkdownEditor from './InlineMarkdownEditor'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import { cameraStorage } from '@/utils/cameraStorage'
 
 type Tables = Database['public']['Tables']
 type Board = Tables['boards']['Row']
@@ -860,6 +861,28 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   useEffect(() => {
     loadElements()
   }, [board.id])
+
+  // Restore camera position when board changes
+  useEffect(() => {
+    const savedPosition = cameraStorage.get(board.id)
+    if (savedPosition) {
+      setStageScale(savedPosition.scale)
+      setStagePos({ x: savedPosition.x, y: savedPosition.y })
+    }
+  }, [board.id])
+
+  // Save camera position when it changes (with debounce)
+  useEffect(() => {
+    const saveTimeout = setTimeout(() => {
+      cameraStorage.save(board.id, {
+        x: stagePos.x,
+        y: stagePos.y,
+        scale: stageScale
+      })
+    }, 500) // 500ms debounce
+
+    return () => clearTimeout(saveTimeout)
+  }, [board.id, stagePos.x, stagePos.y, stageScale])
 
   // Handle navigation context for auto-selection and centering
   useEffect(() => {
