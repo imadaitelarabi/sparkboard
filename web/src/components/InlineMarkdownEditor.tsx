@@ -51,8 +51,23 @@ export default function InlineMarkdownEditor({
   }, [isEditing, initialValue])
 
   const handleSave = useCallback(() => {
-    if (value.trim() !== initialValue.trim()) {
-      onSave(value.trim() || 'Empty text')
+    // Preserve internal line breaks but trim only leading/trailing whitespace on each line
+    const processedValue = value
+      .split('\n')
+      .map(line => line.trimEnd()) // Remove trailing spaces from each line
+      .join('\n')
+      .replace(/^\s+/, '') // Remove leading whitespace from start
+      .replace(/\s+$/, '') // Remove trailing whitespace from end
+    
+    const processedInitial = initialValue
+      .split('\n')
+      .map(line => line.trimEnd())
+      .join('\n')
+      .replace(/^\s+/, '')
+      .replace(/\s+$/, '')
+    
+    if (processedValue !== processedInitial) {
+      onSave(processedValue || 'Empty text')
     } else {
       onCancel()
     }
@@ -150,7 +165,9 @@ export default function InlineMarkdownEditor({
           fontFamily: fontFamily,
           color: fill,
           lineHeight: '1.4',
-          fontWeight: 'inherit'
+          fontWeight: 'inherit',
+          whiteSpace: 'pre-wrap',
+          wordWrap: 'break-word'
         }}
         placeholder="Type your markdown text..."
         spellCheck={false}
