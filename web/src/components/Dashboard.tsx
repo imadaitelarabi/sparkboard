@@ -134,7 +134,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <img src="/logo.png" alt="SparkBoard Logo" className="h-16 w-50" />
+              <img src="/logo.png" alt="SparkBoard Logo" className="h-16 w-48" />
             </div>
             <p className="text-muted-foreground text-sm">Dashboard</p>
           </div>
