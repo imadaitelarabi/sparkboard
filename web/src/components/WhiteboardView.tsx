@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import type { Json } from '@/types/database.types'
 
 // Extend Window interface for zoom timeout
 declare global {
@@ -530,20 +531,59 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
   const pasteElements = async () => {
     if (copiedElements.length === 0) return
 
-    const offset = 20 // Offset to avoid pasting exactly on top
+    // Calculate horizontal positioning: 20px to the right of rightmost element  
+    const rightmostX = Math.max(...copiedElements.map(el => (el.x || 0) + (el.width || 0)))
+    const offset = 20
+
+    // Find the highest layer index among all elements for proper layer structure
+    const maxLayerIndex = elements.length > 0 ? Math.max(...elements.map(el => el.layer_index || 0)) : 0
+    
+    // Create mapping for group duplication: old groupId -> new groupId
+    const groupIdMapping = new Map<string, string>()
+    
     const newElements = []
 
-    for (const element of copiedElements) {
+    for (let i = 0; i < copiedElements.length; i++) {
+      const element = copiedElements[i]
+      const properties = element.properties as ElementProperties || {}
+      
+      // Handle group duplication
+      let updatedProperties: ElementProperties = { ...properties }
+      if (properties.groupId) {
+        // Create new group ID if this is the first time we encounter this group
+        if (!groupIdMapping.has(properties.groupId)) {
+          groupIdMapping.set(properties.groupId, crypto.randomUUID())
+        }
+        
+        // Determine if this should be the group leader
+        // Find the original group leader among copied elements
+        const originalGroupMembers = copiedElements.filter(el => {
+          const props = el.properties as ElementProperties || {}
+          return props.groupId === properties.groupId
+        })
+        const originalGroupLeader = originalGroupMembers.find(el => {
+          const props = el.properties as ElementProperties || {}
+          return props.isGroupLeader
+        })
+        
+        // Update group properties for the duplicate
+        updatedProperties = {
+          ...updatedProperties,
+          groupId: groupIdMapping.get(properties.groupId),
+          isGroupLeader: (element === originalGroupLeader)
+        }
+      }
+
       const newElement: Omit<Element, 'id' | 'created_at' | 'updated_at'> = {
         board_id: board.id,
         type: element.type,
-        x: (element.x || 0) + offset,
-        y: (element.y || 0) + offset,
+        x: rightmostX + offset,
+        y: element.y || 0, // Keep original Y position
         width: element.width,
         height: element.height,
         rotation: element.rotation,
-        properties: element.properties,
-        layer_index: elements.length + newElements.length,
+        properties: updatedProperties as Json,
+        layer_index: maxLayerIndex + 1 + i, // Preserve relative layer order
         created_by: (user as { id: string } | null)?.id || '',
         last_modified_by: (user as { id: string } | null)?.id || '',
         last_modified_at: new Date().toISOString(),
@@ -633,20 +673,59 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
     const selectedElements = elements.filter(el => selectedElementIds.includes(el.id))
     if (selectedElements.length === 0) return
 
-    const offset = 20 // Offset to avoid duplicating exactly on top
+    // Calculate horizontal positioning: 20px to the right of rightmost element
+    const rightmostX = Math.max(...selectedElements.map(el => (el.x || 0) + (el.width || 0)))
+    const offset = 20
+
+    // Find the highest layer index among all elements for proper layer structure
+    const maxLayerIndex = elements.length > 0 ? Math.max(...elements.map(el => el.layer_index || 0)) : 0
+    
+    // Create mapping for group duplication: old groupId -> new groupId
+    const groupIdMapping = new Map<string, string>()
+
     const newElements = []
 
-    for (const element of selectedElements) {
+    for (let i = 0; i < selectedElements.length; i++) {
+      const element = selectedElements[i]
+      const properties = element.properties as ElementProperties || {}
+      
+      // Handle group duplication
+      let updatedProperties: ElementProperties = { ...properties }
+      if (properties.groupId) {
+        // Create new group ID if this is the first time we encounter this group
+        if (!groupIdMapping.has(properties.groupId)) {
+          groupIdMapping.set(properties.groupId, crypto.randomUUID())
+        }
+        
+        // Determine if this should be the group leader
+        // Find the original group leader among selected elements
+        const originalGroupMembers = selectedElements.filter(el => {
+          const props = el.properties as ElementProperties || {}
+          return props.groupId === properties.groupId
+        })
+        const originalGroupLeader = originalGroupMembers.find(el => {
+          const props = el.properties as ElementProperties || {}
+          return props.isGroupLeader
+        })
+        
+        // Update group properties for the duplicate
+        updatedProperties = {
+          ...updatedProperties,
+          groupId: groupIdMapping.get(properties.groupId),
+          isGroupLeader: (element === originalGroupLeader)
+        }
+      }
+
       const newElement: Omit<Element, 'id' | 'created_at' | 'updated_at'> = {
         board_id: board.id,
         type: element.type,
-        x: (element.x || 0) + offset,
-        y: (element.y || 0) + offset,
+        x: rightmostX + offset,
+        y: element.y || 0, // Keep original Y position
         width: element.width,
         height: element.height,
         rotation: element.rotation,
-        properties: element.properties,
-        layer_index: elements.length + newElements.length,
+        properties: updatedProperties as Json,
+        layer_index: maxLayerIndex + 1 + i, // Preserve relative layer order
         created_by: (user as { id: string } | null)?.id || '',
         last_modified_by: (user as { id: string } | null)?.id || '',
         last_modified_at: new Date().toISOString(),

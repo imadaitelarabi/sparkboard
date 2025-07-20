@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Plus, Search, Calendar, User, FolderOpen, Sparkles } from 'lucide-react'
+import { Plus, Search, Calendar, User, FolderOpen, LayoutGrid, Columns3, ExternalLink } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
 import { Database } from '@/types/database.types'
 import AuthForm from './AuthForm'
 import InputModal from './InputModal'
-import ThemeToggle from './ThemeToggle'
+import KanbanView from './KanbanView'
+import NoLinkedElementsModal from './NoLinkedElementsModal'
 
 type Tables = Database['public']['Tables']
 type Task = Tables['tasks']['Row']
@@ -17,6 +18,7 @@ interface TaskWithDetails extends Task {
   project?: { name: string } | null
   category?: { name: string; color: string | null } | null
   assignee?: { full_name: string } | null
+  task_elements?: { element_id: string }[] | null
 }
 
 export default function Dashboard() {
@@ -30,6 +32,9 @@ export default function Dashboard() {
   const [filterProject, setFilterProject] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false)
+  const [viewMode, setViewMode] = useState<'kanban' | 'grid'>('kanban')
+  const [groupBy, setGroupBy] = useState<'project' | 'priority' | 'status'>('status')
+  const [showNoLinkedElementsModal, setShowNoLinkedElementsModal] = useState(false)
 
   const loadData = useCallback(async () => {
     try {
@@ -58,7 +63,8 @@ export default function Dashboard() {
           *,
           project:projects(name),
           category:task_categories(name, color),
-          assignee:user_profiles!tasks_assignee_id_fkey(full_name)
+          assignee:user_profiles!tasks_assignee_id_fkey(full_name),
+          task_elements(element_id)
         `)
         .order('created_at', { ascending: false })
 
@@ -149,6 +155,125 @@ export default function Dashboard() {
     return matchesSearch && matchesProject && matchesStatus
   })
 
+  // Group tasks for kanban view
+  function getKanbanColumns() {
+    switch (groupBy) {
+      case 'status':
+        return [
+          {
+            id: 'pending',
+            name: 'To Do',
+            color: '#6b7280',
+            tasks: filteredTasks.filter(task => task.status === 'pending')
+          },
+          {
+            id: 'in_progress', 
+            name: 'In Progress',
+            color: '#f97316',
+            tasks: filteredTasks.filter(task => task.status === 'in_progress')
+          },
+          {
+            id: 'completed',
+            name: 'Done',
+            color: '#22c55e',
+            tasks: filteredTasks.filter(task => task.status === 'completed')
+          }
+        ]
+      case 'priority':
+        return [
+          {
+            id: 'high',
+            name: 'High Priority',
+            color: '#ef4444',
+            tasks: filteredTasks.filter(task => task.priority === 'high')
+          },
+          {
+            id: 'medium',
+            name: 'Medium Priority', 
+            color: '#f97316',
+            tasks: filteredTasks.filter(task => task.priority === 'medium' || !task.priority)
+          },
+          {
+            id: 'low',
+            name: 'Low Priority',
+            color: '#22c55e',
+            tasks: filteredTasks.filter(task => task.priority === 'low')
+          }
+        ]
+      case 'project':
+        // Group by project
+        const projectMap = new Map()
+        
+        // Add tasks to their project groups
+        filteredTasks.forEach(task => {
+          const projectId = task.project_id || 'unassigned'
+          const projectName = task.project?.name || 'Unassigned'
+          
+          if (!projectMap.has(projectId)) {
+            projectMap.set(projectId, {
+              id: projectId,
+              name: projectName,
+              color: '#6366f1',
+              tasks: []
+            })
+          }
+          projectMap.get(projectId).tasks.push(task)
+        })
+        
+        return Array.from(projectMap.values())
+      default:
+        return []
+    }
+  }
+
+  // Handle task click for navigation to whiteboard
+  async function handleTaskClick(task: TaskWithDetails) {
+    // Only navigate if task has linked elements
+    if (task.task_elements && task.task_elements.length > 0) {
+      const elementIds = task.task_elements.map((te: { element_id: string }) => te.element_id)
+      
+      try {
+        // Query to find which board contains these elements
+        const { data: elementsData, error: elementsError } = await supabase
+          .from('elements')
+          .select('board_id')
+          .in('id', elementIds)
+          .limit(1)
+
+        if (elementsError) throw elementsError
+
+        if (elementsData && elementsData.length > 0) {
+          const boardId = elementsData[0].board_id
+          
+          // Find the whiteboard that contains these elements
+          const { data: boardData, error: boardError } = await supabase
+            .from('boards')
+            .select('*')
+            .eq('id', boardId)
+            .eq('type', 'whiteboard')
+            .single()
+
+          if (boardError) throw boardError
+
+          if (boardData) {
+            // Navigate to the specific whiteboard with element selection
+            const searchParams = new URLSearchParams()
+            searchParams.set('tab', 'whiteboard')
+            searchParams.set('elements', elementIds.join(','))
+            searchParams.set('board', boardId)
+            
+            router.push(`/project/${task.project_id}?${searchParams.toString()}`)
+          }
+        }
+      } catch (error) {
+        console.error('Error finding board for elements:', error)
+      }
+    } else {
+      // Show modal for tasks without linked elements
+      setShowNoLinkedElementsModal(true)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -210,9 +335,9 @@ export default function Dashboard() {
 
         {/* Main Content */}
         <main className="flex-1 p-5">
-          {/* Filters */}
+          {/* Filters and View Controls */}
           <div className="bg-card rounded-lg border border-border p-3 mb-5">
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3 items-center">
               <div className="flex-1 min-w-52">
                 <div className="relative">
                   <Search className="h-4 w-4 absolute left-2 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
@@ -225,6 +350,7 @@ export default function Dashboard() {
                   />
                 </div>
               </div>
+              
               <select
                 value={filterProject}
                 onChange={(e) => setFilterProject(e.target.value)}
@@ -235,6 +361,7 @@ export default function Dashboard() {
                   <option key={project.id} value={project.id}>{project.name}</option>
                 ))}
               </select>
+              
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
@@ -245,55 +372,119 @@ export default function Dashboard() {
                 <option value="in_progress">In Progress</option>
                 <option value="completed">Done</option>
               </select>
+
+              {/* Group By Filter (for Kanban view) */}
+              {viewMode === 'kanban' && (
+                <select
+                  value={groupBy}
+                  onChange={(e) => setGroupBy(e.target.value as 'project' | 'priority' | 'status')}
+                  className="px-2 py-2 bg-input border border-border rounded-md focus:ring-2 focus:ring-ring focus:border-transparent text-sm"
+                >
+                  <option value="status">Group by Status</option>
+                  <option value="project">Group by Project</option>
+                  <option value="priority">Group by Priority</option>
+                </select>
+              )}
+
+              {/* View Toggle */}
+              <div className="flex bg-muted rounded-md p-1">
+                <button
+                  onClick={() => setViewMode('kanban')}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-sm text-xs font-medium transition-colors ${
+                    viewMode === 'kanban'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Columns3 className="h-3 w-3" />
+                  Kanban
+                </button>
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-sm text-xs font-medium transition-colors ${
+                    viewMode === 'grid'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <LayoutGrid className="h-3 w-3" />
+                  Grid
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Tasks Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-            {filteredTasks.map((task) => (
-              <div
-                key={task.id}
-                className="bg-card rounded-lg border border-border p-3 hover:shadow-md transition-all duration-normal cursor-pointer group"
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className="font-medium text-foreground line-clamp-2 text-sm">{task.title}</h3>
-                  <span
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      task.status === 'completed'
-                        ? 'bg-success-100 text-success-800'
-                        : task.status === 'in_progress'
-                        ? 'bg-warning-100 text-warning-800'
-                        : 'bg-secondary text-secondary-foreground'
-                    }`}
-                  >
-                    {task.status === 'completed' ? 'Done' : 
-                     task.status === 'in_progress' ? 'In Progress' : 'To Do'}
-                  </span>
-                </div>
-                
-                {task.description && (
-                  <p className="text-muted-foreground text-xs mb-2 line-clamp-2">{task.description}</p>
-                )}
-
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <User className="h-3 w-3" />
-                    <span>{task.assignee?.full_name || 'Unassigned'}</span>
+          {/* Task Views */}
+          {viewMode === 'grid' ? (
+            /* Tasks Grid */
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {filteredTasks.map((task) => (
+                <div
+                  key={task.id}
+                  onClick={() => handleTaskClick(task)}
+                  className={`bg-card rounded-lg border border-border p-3 hover:shadow-md transition-all duration-normal group ${
+                    task.task_elements && task.task_elements.length > 0 
+                      ? 'cursor-pointer hover:border-primary/50' 
+                      : 'cursor-default'
+                  }`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <h3 className="font-medium text-foreground line-clamp-2 text-sm">{task.title}</h3>
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        task.status === 'completed'
+                          ? 'bg-success-100 text-success-800'
+                          : task.status === 'in_progress'
+                          ? 'bg-warning-100 text-warning-800'
+                          : 'bg-secondary text-secondary-foreground'
+                      }`}
+                    >
+                      {task.status === 'completed' ? 'Done' : 
+                       task.status === 'in_progress' ? 'In Progress' : 'To Do'}
+                    </span>
                   </div>
-                  {task.due_date && (
+                  
+                  {task.description && (
+                    <p className="text-muted-foreground text-xs mb-2 line-clamp-2">{task.description}</p>
+                  )}
+
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <div className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      <span>{new Date(task.due_date).toLocaleDateString()}</span>
+                      <User className="h-3 w-3" />
+                      <span>{task.assignee?.full_name || 'Unassigned'}</span>
+                    </div>
+                    {task.due_date && (
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        <span>{new Date(task.due_date).toLocaleDateString()}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-1 text-xs text-muted-foreground/70">
+                    {task.project?.name}
+                  </div>
+                  
+                  {/* Linked elements indicator */}
+                  {task.task_elements && task.task_elements.length > 0 && (
+                    <div className="mt-2 flex items-center gap-1 text-primary text-xs">
+                      <ExternalLink className="h-3 w-3" />
+                      <span>View on whiteboard ({task.task_elements.length} linked)</span>
                     </div>
                   )}
                 </div>
-
-                <div className="mt-1 text-xs text-muted-foreground/70">
-                  {task.project?.name}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            /* Kanban View */
+            <div className="h-[calc(96vh-180px)]">
+              <KanbanView
+                columns={getKanbanColumns()}
+                onTaskClick={handleTaskClick}
+                compact={true}
+              />
+            </div>
+          )}
 
           {filteredTasks.length === 0 && (
             <div className="text-center py-10">
@@ -320,6 +511,12 @@ export default function Dashboard() {
         title="Create New Project"
         placeholder="Enter project name..."
         submitText="Create Project"
+      />
+
+      {/* No Linked Elements Modal */}
+      <NoLinkedElementsModal
+        isOpen={showNoLinkedElementsModal}
+        onClose={() => setShowNoLinkedElementsModal(false)}
       />
     </div>
   )

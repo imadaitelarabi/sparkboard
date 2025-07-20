@@ -9,6 +9,7 @@ import { Database } from '@/types/database.types'
 import InputModal from './InputModal'
 import ConfirmationModal from './ConfirmationModal'
 import TaskEditModal from './TaskEditModal'
+import NoLinkedElementsModal from './NoLinkedElementsModal'
 
 type Tables = Database['public']['Tables']
 type Board = Tables['boards']['Row']
@@ -46,6 +47,7 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
   const [editingTask, setEditingTask] = useState<TaskWithDetails | null>(null)
   const [taskMenuOpen, setTaskMenuOpen] = useState<string | null>(null)
+  const [showNoLinkedElementsModal, setShowNoLinkedElementsModal] = useState(false)
 
   const loadTasksAndCategories = useCallback(async () => {
     try {
@@ -269,6 +271,9 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
       } catch (error) {
         console.error('Error finding board for elements:', error)
       }
+    } else {
+      // Show modal for tasks without linked elements
+      setShowNoLinkedElementsModal(true)
     }
   }
 
@@ -513,6 +518,12 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
           setEditingTask(null)
         }}
         task={editingTask}
+      />
+
+      {/* No Linked Elements Modal */}
+      <NoLinkedElementsModal
+        isOpen={showNoLinkedElementsModal}
+        onClose={() => setShowNoLinkedElementsModal(false)}
       />
     </div>
   )
