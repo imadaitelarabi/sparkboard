@@ -372,7 +372,7 @@ interface WhiteboardElement extends Element {
   konvaRef?: Konva.Node
 }
 
-export default function WhiteboardView({ board, accessLevel = 'admin' }: WhiteboardViewProps) {
+function WhiteboardViewInner({ board, accessLevel = 'admin' }: WhiteboardViewProps) {
   const stageRef = useRef<Konva.Stage>(null)
   const supabase = createClient()
   const { 
@@ -3472,5 +3472,30 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
 
 
     </div>
+  )
+}
+
+export default function WhiteboardView(props: WhiteboardViewProps) {
+  const [stageContainer, setStageContainer] = useState<HTMLDivElement | null>(null)
+  const [stageScale, setStageScale] = useState(1)
+  const [stagePosition, setStagePosition] = useState({ x: 0, y: 0 })
+
+  // Handle save function for text editor
+  const handleTextSave = useCallback((elementId: string, content: string) => {
+    // This will be passed down to the inner component through context if needed
+    // For now, we'll need to access the updateElement function from the inner component
+    console.log('Text saved:', elementId, content)
+  }, [])
+
+  return (
+    <TextEditorProvider>
+      <WhiteboardViewInner {...props} />
+      <TiptapManager
+        onSave={handleTextSave}
+        stageContainer={stageContainer}
+        stageScale={stageScale}
+        stagePosition={stagePosition}
+      />
+    </TextEditorProvider>
   )
 }
