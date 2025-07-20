@@ -775,11 +775,29 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     {
       key: 'v',
       ctrlKey: true,
-      callback: () => {
+      callback: async () => {
+        // Check if clipboard contains images first
+        try {
+          const clipboardItems = await navigator.clipboard.read()
+          const hasImage = clipboardItems.some(item => 
+            item.types.some(type => type.startsWith('image/'))
+          )
+          
+          if (hasImage) {
+            // Let the native paste event handle images - don't prevent default
+            // The handleClipboardPaste listener will handle this
+            return
+          }
+        } catch {
+          // If clipboard API fails, fall back to element pasting
+          console.log('Clipboard API not available, falling back to element paste')
+        }
+        
+        // No images found, handle internal element pasting
         pasteElements()
       },
-      description: 'Paste elements',
-      preventDefault: true
+      description: 'Paste elements or images',
+      preventDefault: false
     },
     {
       key: 'd',

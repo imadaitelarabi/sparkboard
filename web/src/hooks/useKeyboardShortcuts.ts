@@ -6,7 +6,7 @@ export interface KeyboardShortcut {
   shiftKey?: boolean;
   altKey?: boolean;
   metaKey?: boolean;
-  callback: (event: KeyboardEvent) => void;
+  callback: (event: KeyboardEvent) => void | Promise<void>;
   description?: string;
   preventDefault?: boolean;
 }
