@@ -121,113 +121,110 @@ export default function TiptapKonvaText({
   }, [])
 
   return (
-    <Group
-      ref={groupRef}
-      x={x}
-      y={y}
-      width={width}
-      height={height}
-      onClick={onClick}
-      onDblClick={handleDoubleClick}
-      draggable={draggable && !isEditMode}
-      onDragStart={onDragStart}
-      onDragMove={onDragMove}
-      onDragEnd={onDragEnd}
-      onContextMenu={onContextMenu}
-      clipX={0}
-      clipY={0}
-      clipWidth={width}
-      clipHeight={height}
-    >
-      {/* Background for better visibility */}
-      <Rect
-        x={0}
-        y={0}
+    <>
+      <Group
+        ref={groupRef}
+        x={x}
+        y={y}
         width={width}
         height={height}
-        fill="transparent"
-        stroke="transparent"
-      />
-      
-      {/* Text content using Konva Text component for display */}
-      {!isEditMode && (
-        <Text
-          x={8}
-          y={8}
-          width={width - 16}
-          height={height - 16}
-          text={htmlToPlainText(content)}
-          fontSize={fontSize}
-          fontFamily={fontFamily}
-          fill={fill}
-          align={align}
-          verticalAlign={verticalAlign}
-          wrap="word"
-          ellipsis={true}
+        onClick={onClick}
+        onDblClick={handleDoubleClick}
+        draggable={draggable && !isEditMode}
+        onDragStart={onDragStart}
+        onDragMove={onDragMove}
+        onDragEnd={onDragEnd}
+        onContextMenu={onContextMenu}
+        clipX={0}
+        clipY={0}
+        clipWidth={width}
+        clipHeight={height}
+      >
+        {/* Background for better visibility */}
+        <Rect
+          x={0}
+          y={0}
+          width={width}
+          height={height}
+          fill="transparent"
+          stroke="transparent"
         />
-      )}
+        
+        {/* Text content using Konva Text component for display */}
+        {!isEditMode && (
+          <Text
+            x={8}
+            y={8}
+            width={width - 16}
+            height={height - 16}
+            text={htmlToPlainText(content)}
+            fontSize={fontSize}
+            fontFamily={fontFamily}
+            fill={fill}
+            align={align}
+            verticalAlign={verticalAlign}
+            wrap="word"
+            ellipsis={true}
+          />
+        )}
+      </Group>
       
-      {/* TipTap editor overlay when editing */}
-      {isEditMode && typeof window !== 'undefined' && (
-        <React.Fragment>
-          {/* Create a portal for the editor */}
-          {(() => {
-            const portalRoot = document.getElementById('tiptap-portal') || (() => {
-              const div = document.createElement('div')
-              div.id = 'tiptap-portal'
-              document.body.appendChild(div)
-              return div
-            })()
-            
-            // Calculate absolute position with proper scaling
-            const stage = groupRef.current?.getStage()
-            const stageContainer = stage?.container()
-            if (!stageContainer || !stage) return null
-            
-            const containerRect = stageContainer.getBoundingClientRect()
-            const stageScale = stage.scaleX() || 1
-            const stagePos = stage.position()
-            
-            const absoluteX = containerRect.left + (x * stageScale) + (stagePos?.x || 0)
-            const absoluteY = containerRect.top + (y * stageScale) + (stagePos?.y || 0)
-            const scaledWidth = width * stageScale
-            const scaledHeight = height * stageScale
-            
-            return ReactDOM.createPortal(
-              <div
-                style={{
-                  position: 'fixed',
-                  left: absoluteX,
-                  top: absoluteY,
-                  width: scaledWidth,
-                  height: scaledHeight,
-                  zIndex: 1000,
-                  pointerEvents: 'auto',
-                }}
-              >
-                <TiptapEditor
-                  ref={editorRef}
-                  content={content}
-                  onChange={setContent}
-                  onKeyDown={handleKeyDown}
-                  onBlur={handleSave}
-                  editable={true}
-                  autoFocus={true}
-                  className="embedded h-full"
-                  style={{
-                    height: '100%',
-                    fontSize: fontSize * stageScale,
-                    fontFamily: fontFamily,
-                    color: fill,
-                  }}
-                  placeholder="Type your text..."
-                />
-              </div>,
-              portalRoot
-            )
-          })()}
-        </React.Fragment>
-      )}
-    </Group>
+      {/* TipTap editor overlay when editing - rendered outside Konva */}
+      {isEditMode && typeof window !== 'undefined' && (() => {
+        const portalRoot = document.getElementById('tiptap-portal') || (() => {
+          const div = document.createElement('div')
+          div.id = 'tiptap-portal'
+          document.body.appendChild(div)
+          return div
+        })()
+        
+        // Calculate absolute position with proper scaling
+        const stage = groupRef.current?.getStage()
+        const stageContainer = stage?.container()
+        if (!stageContainer || !stage) return null
+        
+        const containerRect = stageContainer.getBoundingClientRect()
+        const stageScale = stage.scaleX() || 1
+        const stagePos = stage.position()
+        
+        const absoluteX = containerRect.left + (x * stageScale) + (stagePos?.x || 0)
+        const absoluteY = containerRect.top + (y * stageScale) + (stagePos?.y || 0)
+        const scaledWidth = width * stageScale
+        const scaledHeight = height * stageScale
+        
+        return ReactDOM.createPortal(
+          <div
+            style={{
+              position: 'fixed',
+              left: absoluteX,
+              top: absoluteY,
+              width: scaledWidth,
+              height: scaledHeight,
+              zIndex: 1000,
+              pointerEvents: 'auto',
+            }}
+          >
+            <TiptapEditor
+              ref={editorRef}
+              content={content}
+              onChange={setContent}
+              onKeyDown={handleKeyDown}
+              onBlur={handleSave}
+              editable={true}
+              autoFocus={true}
+              className="embedded h-full"
+              style={{
+                height: '100%',
+                fontSize: fontSize * stageScale,
+                fontFamily: fontFamily,
+                color: fill,
+              }}
+              placeholder="Type your text..."
+            />
+          </div>,
+          portalRoot
+        )
+      })()}
+    </>
   )
 }
