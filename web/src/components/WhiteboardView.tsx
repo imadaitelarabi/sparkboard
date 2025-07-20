@@ -44,7 +44,9 @@ import CreateTaskModal from './CreateTaskModal'
 import InputModal from './InputModal'
 import MarkdownEditModal from './MarkdownEditModal'
 import ThemeToggle from './ThemeToggle'
-import TiptapKonvaText from './TiptapKonvaText'
+import KonvaText from './KonvaText'
+import TiptapManager from './TiptapManager'
+import { TextEditorProvider } from '../hooks/useTextEditor'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useRealtimeSync } from '@/hooks/useRealtimeSync'
 import { usePresence } from '@/hooks/usePresence'
@@ -2674,8 +2676,9 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
         )
       case 'text':
         return (
-          <TiptapKonvaText
+          <KonvaText
             key={element.id}
+            id={element.id}
             text={(props.text as string) || '<h1>Rich Text</h1><p>Double click to edit</p><ul><li><strong>Bold text</strong></li><li><em>Italic text</em></li><li><strong><em>Bold italic</em></strong></li></ul>'}
             x={element.x || 0}
             y={element.y || 0}
@@ -2687,19 +2690,7 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
             align="left"
             verticalAlign="top"
             onClick={(e: Konva.KonvaEventObject<MouseEvent>) => handleElementClick(element.id, e)}
-            isEditing={inlineEditingElement === element.id}
-            onTextSave={(newText: string) => {
-              updateElement(element.id, { 
-                properties: { 
-                  ...props, 
-                  text: newText 
-                } 
-              })
-              setInlineEditingElement(null)
-            }}
-            onEditingCancel={() => setInlineEditingElement(null)}
-            draggable={activeTool === 'select' && inlineEditingElement !== element.id}
-            scale={stageScale}
+            draggable={activeTool === 'select'}
             onDragStart={() => handleElementDragStart(element.id)}
             onDragMove={(e: Konva.KonvaEventObject<DragEvent>) => handleElementDrag(element.id, e.target.attrs)}
             onDragEnd={(e: Konva.KonvaEventObject<DragEvent>) => handleElementDragEnd(element.id, e.target.attrs)}
