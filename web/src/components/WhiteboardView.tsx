@@ -90,24 +90,32 @@ const ImageElement = React.memo(({ element, baseProps }: {
   const imageLoader = useMemo(() => {
     if (!props.imageUrl) return null
 
-    const img = new window.Image()
-    img.crossOrigin = 'anonymous'
-    
-    return new Promise<HTMLImageElement>((resolve, reject) => {
-      img.onload = () => resolve(img)
-      img.onerror = (e) => {
-        console.error('Failed to load image:', props.imageUrl, e)
-        // Try loading without crossOrigin if it fails
-        const imgRetry = new window.Image()
-        imgRetry.onload = () => resolve(imgRetry)
-        imgRetry.onerror = () => {
-          console.error('Failed to load image even without CORS:', props.imageUrl)
-          reject(new Error('Failed to load image'))
+    return (async () => {
+      // Import image upload service for URL migration
+      const { imageUploadService } = await import('../lib/image-upload')
+      
+      // Migrate public URLs to signed URLs
+      const migratedUrl = await imageUploadService.migratePublicUrlToSigned(props.imageUrl!)
+      
+      const img = new window.Image()
+      img.crossOrigin = 'anonymous'
+      
+      return new Promise<HTMLImageElement>((resolve, reject) => {
+        img.onload = () => resolve(img)
+        img.onerror = (e) => {
+          console.error('Failed to load image:', migratedUrl, e)
+          // Try loading without crossOrigin if it fails
+          const imgRetry = new window.Image()
+          imgRetry.onload = () => resolve(imgRetry)
+          imgRetry.onerror = () => {
+            console.error('Failed to load image even without CORS:', migratedUrl)
+            reject(new Error('Failed to load image'))
+          }
+          imgRetry.src = migratedUrl
         }
-        imgRetry.src = props.imageUrl!
-      }
-      img.src = props.imageUrl!
-    })
+        img.src = migratedUrl
+      })
+    })()
   }, [props.imageUrl])
 
   useEffect(() => {

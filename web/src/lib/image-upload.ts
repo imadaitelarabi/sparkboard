@@ -43,16 +43,55 @@ export class ImageUploadService {
       throw new Error(`Failed to upload image: ${error.message}`)
     }
 
-    // Get public URL (bucket is now public)
-    const { data: urlData } = this.supabase.storage
+    // Get signed URL for private bucket (expires in 1 hour)
+    const { data: urlData, error: urlError } = await this.supabase.storage
       .from('images')
-      .getPublicUrl(data.path)
+      .createSignedUrl(data.path, 3600) // 1 hour expiry
+
+    if (urlError) {
+      throw new Error(`Failed to create signed URL: ${urlError.message}`)
+    }
 
     return {
-      url: urlData.publicUrl,
+      url: urlData.signedUrl,
       storagePath: data.path,
       aspectRatio
     }
+  }
+
+  async getSignedUrl(storagePath: string, expiresIn: number = 3600): Promise<string> {
+    const { data, error } = await this.supabase.storage
+      .from('images')
+      .createSignedUrl(storagePath, expiresIn)
+
+    if (error) {
+      throw new Error(`Failed to create signed URL: ${error.message}`)
+    }
+
+    return data.signedUrl
+  }
+
+  /**
+   * Migrates old public URLs to signed URLs for existing images
+   * Handles URLs that contain the Supabase storage public URL pattern
+   */
+  async migratePublicUrlToSigned(url: string, expiresIn: number = 3600): Promise<string> {
+    // Check if this is already a signed URL
+    if (url.includes('sign=') || url.includes('token=')) {
+      return url
+    }
+
+    // Extract storage path from public URL
+    const publicUrlPattern = /\/storage\/v1\/object\/public\/images\/(.+)$/
+    const match = url.match(publicUrlPattern)
+    
+    if (!match) {
+      // Not a Supabase storage URL, return as is
+      return url
+    }
+
+    const storagePath = match[1]
+    return this.getSignedUrl(storagePath, expiresIn)
   }
 
   async deleteImage(storagePath: string): Promise<void> {
