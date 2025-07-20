@@ -2424,7 +2424,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       strokeColor = 'var(--color-primary-500)'
     } else if (isGrouped) {
       strokeWidth = 1.5
-      strokeColor = 'var(--color-accent-300)' // Lighter accent color for groups
+      strokeColor = '#6ee7b7' // Light emerald for grouped elements
     }
     
     const dashArray = getStrokeDashArray(props.strokeStyle, strokeWidth)
