@@ -2124,8 +2124,8 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     const pointer = stage.getPointerPosition()
     if (!pointer) return
 
-    // Update cursor position for presence tracking
-    updateCursor(pointer.x, pointer.y, activeTool)
+    // Cursor tracking disabled for performance
+    // updateCursor(pointer.x, pointer.y, activeTool)
     
     // Handle element resizing
     if (resizeState.isResizing) {
@@ -2809,16 +2809,22 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
             <div className="text-sm font-medium text-purple-700 dark:text-purple-300">
               {board.name} - Whiteboard
             </div>
-            {/* Connection status indicator */}
+            {/* Collaborator avatars */}
             <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${
-                connectionStatus === 'connected' ? 'bg-green-500' :
-                connectionStatus === 'connecting' ? 'bg-yellow-500' :
-                'bg-red-500'
-              }`} />
-              <span className="text-xs text-gray-600 dark:text-gray-400">
-                {onlineUsers > 1 ? `${onlineUsers} online` : 'Offline'}
-              </span>
+              {otherCursors.length > 0 && (
+                <div className="flex items-center gap-1">
+                  {otherCursors.map((cursor) => (
+                    <div
+                      key={cursor.user_id}
+                      className="w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-xs font-medium text-white shadow-sm"
+                      style={{ backgroundColor: cursor.user_color }}
+                      title={cursor.user_name || `User ${cursor.user_id.slice(0, 8)}`}
+                    >
+                      {(cursor.user_name || `U${cursor.user_id.slice(0, 1)}`).charAt(0).toUpperCase()}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -3239,41 +3245,8 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
               />
             )}
 
-            {/* Other users' cursors */}
-            {otherCursors.map((cursor) => (
-              <React.Fragment key={cursor.user_id}>
-                {/* Cursor pointer */}
-                <Arrow
-                  x={cursor.cursor_x}
-                  y={cursor.cursor_y}
-                  points={[0, 0, 0, 20, 5, 15, 12, 22]}
-                  fill={cursor.user_color}
-                  stroke={cursor.user_color}
-                  strokeWidth={1}
-                  listening={false}
-                />
-                {/* Cursor label */}
-                <Text
-                  x={cursor.cursor_x + 15}
-                  y={cursor.cursor_y}
-                  text={cursor.user_name || `User ${cursor.user_id.slice(0, 8)}`}
-                  fontSize={12}
-                  fill="white"
-                  padding={4}
-                  cornerRadius={4}
-                  listening={false}
-                />
-                <Rect
-                  x={cursor.cursor_x + 15}
-                  y={cursor.cursor_y}
-                  width={100} // Approximate width
-                  height={20}
-                  fill={cursor.user_color}
-                  cornerRadius={4}
-                  listening={false}
-                />
-              </React.Fragment>
-            ))}
+            {/* Cursor tracking disabled for performance */}
+            {/* {otherCursors.map((cursor) => ...)} */}
           </Layer>
         </Stage>
         </div>

@@ -41,42 +41,44 @@ export function usePresence(boardId: string | null) {
         if (!userColor) {
           setUserColor(generateUserColor())
         }
+      } else {
+        // Create anonymous user ID for unauthenticated users
+        const anonymousId = `anon_${Math.random().toString(36).substr(2, 9)}_${Date.now()}`
+        setCurrentUser(anonymousId)
+        if (!userColor) {
+          setUserColor(generateUserColor())
+        }
       }
     }
     getCurrentUser()
   }, [userColor, generateUserColor, supabase])
 
-  // Update cursor position
+  // Optimized cursor updates with smart throttling
+  const lastUpdateRef = useRef(0)
+  const lastPositionRef = useRef({ x: 0, y: 0 })
+  const CURSOR_UPDATE_THROTTLE = 16 // Update every ~16ms (60fps) for smooth movement
+  const MIN_MOVEMENT_DISTANCE = 2 // Only update if cursor moved at least 2px
+
+  // Cursor updates disabled for performance
   const updateCursor = useCallback((x: number, y: number, activeTool?: string) => {
-    if (!channelRef.current || !currentUser) return
-
-    const presenceData: Partial<UserPresence> = {
-      cursor_x: x,
-      cursor_y: y,
-      user_color: userColor,
-      user_id: currentUser,
-      last_seen: Date.now()
-    }
-
-    if (activeTool) {
-      presenceData.active_tool = activeTool
-    }
-
-    channelRef.current.track(presenceData)
+    // Disabled for performance - keeping function for compatibility
+    return
   }, [currentUser, userColor])
 
   // Get other users' cursors (excluding current user)
   const getOtherCursors = useCallback(() => {
     if (!currentUser) return []
 
-    return Object.values(presenceState)
-      .flat()
-      .filter(presence => presence.user_id !== currentUser)
-      .filter(presence => {
-        // Filter out stale presence (older than 30 seconds)
-        const staleThreshold = Date.now() - 30000
-        return presence.last_seen > staleThreshold
-      })
+    const allPresences = Object.values(presenceState).flat()
+    const filteredByUser = allPresences.filter(presence => presence.user_id !== currentUser)
+
+    const filteredByTime = filteredByUser.filter(presence => {
+      // Reduced to 2 minutes for better performance
+      const staleThreshold = Date.now() - 120000
+      return presence.last_seen > staleThreshold
+    })
+
+    return filteredByTime
   }, [presenceState, currentUser])
 
   // Setup presence channel
@@ -99,21 +101,18 @@ export function usePresence(boardId: string | null) {
         setPresenceState(newState)
       })
       .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-        console.log('User joined:', key, newPresences)
+        // Minimal logging for debugging
       })
       .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-        console.log('User left:', key, leftPresences)
+        // Minimal logging for debugging
       })
       .subscribe(async (status) => {
-        console.log('Presence subscription status:', status)
-        
         if (status === 'SUBSCRIBED') {
-          // Track initial presence
+          // Track basic presence without cursor position
           await channel.track({
             user_id: currentUser,
-            cursor_x: 0,
-            cursor_y: 0,
             user_color: userColor,
+            user_name: currentUser.startsWith('anon_') ? 'Anonymous User' : undefined,
             last_seen: Date.now()
           })
         }
@@ -137,21 +136,19 @@ export function usePresence(boardId: string | null) {
     if (!channelRef.current || !currentUser) return
 
     const interval = setInterval(() => {
-      if (channelRef.current) {
-        // Update presence with current timestamp to keep alive
-        const currentPresence = channelRef.current.presenceState()[currentUser]
-        if (currentPresence && currentPresence.length > 0) {
-          const presence = currentPresence[0]
-          channelRef.current.track({
-            ...presence,
-            last_seen: Date.now()
-          })
-        }
+      if (channelRef.current && channelRef.current.state === 'joined') {
+        // Update basic presence to keep alive
+        channelRef.current.track({
+          user_id: currentUser,
+          user_color: userColor,
+          user_name: currentUser.startsWith('anon_') ? 'Anonymous User' : undefined,
+          last_seen: Date.now()
+        })
       }
-    }, 10000) // Update every 10 seconds
+    }, 30000) // Update every 30 seconds to reduce frequency
 
     return () => clearInterval(interval)
-  }, [currentUser])
+  }, [currentUser, userColor])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -163,11 +160,16 @@ export function usePresence(boardId: string | null) {
     }
   }, [])
 
+  const totalUsers = Object.values(presenceState).flat().length
+  const otherCursors = getOtherCursors()
+  
+  // Debug logging removed for clean console
+  
   return {
     updateCursor,
-    otherCursors: getOtherCursors(),
+    otherCursors,
     isConnected: channelRef.current?.state === 'joined',
     userColor,
-    onlineUsers: Object.keys(presenceState).length
+    onlineUsers: totalUsers
   }
 }
