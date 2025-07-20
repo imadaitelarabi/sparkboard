@@ -211,7 +211,10 @@ export default function SharedBoardPage() {
 
       {/* Whiteboard */}
       <div className="h-[calc(100vh-73px)]">
-        <WhiteboardView board={boardData.board} />
+        <WhiteboardView 
+          board={boardData.board} 
+          accessLevel={boardData.share.access_level as 'view' | 'edit' | 'admin'} 
+        />
       </div>
     </div>
   )

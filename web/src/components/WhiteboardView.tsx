@@ -59,6 +59,7 @@ type Element = Tables['elements']['Row']
 
 interface WhiteboardViewProps {
   board: Board
+  accessLevel?: 'view' | 'edit' | 'admin'
 }
 
 type ToolType = 'select' | 'rectangle' | 'circle' | 'text' | 'arrow' | 'sticky_note' | 'image'
@@ -364,7 +365,7 @@ interface WhiteboardElement extends Element {
   konvaRef?: Konva.Node
 }
 
-export default function WhiteboardView({ board }: WhiteboardViewProps) {
+export default function WhiteboardView({ board, accessLevel = 'admin' }: WhiteboardViewProps) {
   const stageRef = useRef<Konva.Stage>(null)
   const supabase = createClient()
   const { 
@@ -397,6 +398,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   const { updateCursor, otherCursors, userColor, onlineUsers } = usePresence(board.id)
 
   const [activeTool, setActiveTool] = useState<ToolType>('select')
+  const isReadOnly = accessLevel === 'view'
   const [stageScale, setStageScale] = useState(1)
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 })
   const [editingElement, setEditingElement] = useState<{ id: string; text: string } | null>(null)
@@ -725,8 +727,59 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     }
   }
 
-  // Keyboard shortcuts for whiteboard
-  useKeyboardShortcuts([
+  // Keyboard shortcuts for whiteboard (disabled for read-only users)
+  useKeyboardShortcuts(isReadOnly ? [
+    // Only allow non-editing shortcuts for read-only users
+    {
+      key: 'Escape',
+      callback: () => {
+        clearSelection()
+        setContextMenu(null)
+      },
+      description: 'Clear selection'
+    },
+    // Zoom and navigation (read-only users can still navigate)
+    {
+      key: '=',
+      ctrlKey: true,
+      callback: () => {
+        const newScale = Math.min(stageScale * 1.2, 5)
+        setStageScale(newScale)
+      },
+      description: 'Zoom in',
+      preventDefault: true
+    },
+    {
+      key: '+',
+      ctrlKey: true,
+      callback: () => {
+        const newScale = Math.min(stageScale * 1.2, 5)
+        setStageScale(newScale)
+      },
+      description: 'Zoom in (plus key)',
+      preventDefault: true
+    },
+    {
+      key: '-',
+      ctrlKey: true,
+      callback: () => {
+        const newScale = Math.max(stageScale / 1.2, 0.1)
+        setStageScale(newScale)
+      },
+      description: 'Zoom out',
+      preventDefault: true
+    },
+    {
+      key: '0',
+      ctrlKey: true,
+      callback: () => {
+        setStageScale(1)
+        setStagePos({ x: 0, y: 0 })
+      },
+      description: 'Reset zoom and position',
+      preventDefault: true
+    }
+  ] : [
     // Tool selection shortcuts
     {
       key: 'v',
@@ -1544,7 +1597,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
 
   // Render context menu
   function renderContextMenu() {
-    if (!contextMenu) return null
+    if (!contextMenu || isReadOnly) return null
     
     const selectedCount = selectedElementIds.length
     
@@ -1831,6 +1884,11 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
 
     // Close context menu
     setContextMenu(null)
+
+    // Prevent element creation for read-only users
+    if (isReadOnly && activeTool !== 'select') {
+      return
+    }
 
     // Check for middle mouse button panning only
     const isMiddleClick = e.evt.button === 1
@@ -2463,7 +2521,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       width: element.width || 0,
       height: element.height || 0,
       rotation: element.rotation || 0,
-      draggable: activeTool === 'select',
+      draggable: activeTool === 'select' && !isReadOnly,
       onClick: (e: Konva.KonvaEventObject<MouseEvent>) => handleElementClick(element.id, e),
       onDblClick: () => {
         // For images, double-click could open properties or do nothing for now
@@ -2472,7 +2530,11 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       onDragStart: () => handleElementDragStart(element.id),
       onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => handleElementDrag(element.id, e.target.attrs),
       onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => handleElementDragEnd(element.id, e.target.attrs),
-      onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>) => handleElementRightClick(element.id, e),
+      onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>) => {
+        if (!isReadOnly) {
+          handleElementRightClick(element.id, e)
+        }
+      },
       stroke: strokeColor,
       strokeWidth: strokeWidth,
       ...(dashArray && { dash: dashArray }),
@@ -2510,7 +2572,9 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
               fontFamily="var(--font-sans)"
               padding={8}
               onDblClick={() => {
-                setEditingElement({ id: element.id, text: (props.text as string) || '' })
+                if (!isReadOnly) {
+                  setEditingElement({ id: element.id, text: (props.text as string) || '' })
+                }
               }}
             />
           </React.Fragment>
@@ -2543,13 +2607,19 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
             verticalAlign="top"
             onClick={(e: Konva.KonvaEventObject<MouseEvent>) => handleElementClick(element.id, e)}
             onDblClick={() => {
-              setInlineEditingElement(element.id)
+              if (!isReadOnly) {
+                setInlineEditingElement(element.id)
+              }
             }}
             draggable={activeTool === 'select' && inlineEditingElement !== element.id}
             onDragStart={() => handleElementDragStart(element.id)}
             onDragMove={(e: Konva.KonvaEventObject<DragEvent>) => handleElementDrag(element.id, e.target.attrs)}
             onDragEnd={(e: Konva.KonvaEventObject<DragEvent>) => handleElementDragEnd(element.id, e.target.attrs)}
-            onContextMenu={(e: Konva.KonvaEventObject<MouseEvent>) => handleElementRightClick(element.id, e)}
+            onContextMenu={(e: Konva.KonvaEventObject<MouseEvent>) => {
+              if (!isReadOnly) {
+                handleElementRightClick(element.id, e)
+              }
+            }}
             isEditing={inlineEditingElement === element.id}
             onTextSave={(newText: string) => {
               updateElementProperties(element.id, { text: newText })
@@ -2596,6 +2666,19 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
 
   // Render left panel
   function renderLeftPanel() {
+    // Don't show tools panel for read-only users
+    if (isReadOnly) {
+      return (
+        <div className="w-64 flex flex-col">
+          <div className="p-4 border-b border-purple-200 dark:border-purple-700">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg p-3">
+              <span className="text-xs font-medium">🔒 View Only</span>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <div className="w-64 flex flex-col">
 
@@ -2829,7 +2912,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
           </div>
           <div className="flex items-center gap-4">
             {/* Style Options for Selected Elements */}
-            {(() => {
+            {!isReadOnly && (() => {
               // Get supported elements (rectangles, circles, and text)
               const supportedElements = selectedElementIds
                 .map(id => elements.find(el => el.id === id))
@@ -2967,13 +3050,15 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
                 </div>
               )}
             </div>
-            <button
-              onClick={() => setIsShareModalOpen(true)}
-              className="p-2 rounded-md bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800/50 transition-colors"
-              title="Share Board"
-            >
-              <Share className="w-5 h-5" />
-            </button>
+            {!isReadOnly && (
+              <button
+                onClick={() => setIsShareModalOpen(true)}
+                className="p-2 rounded-md bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800/50 transition-colors"
+                title="Share Board"
+              >
+                <Share className="w-5 h-5" />
+              </button>
+            )}
             <ThemeToggle />
           </div>
         </div>
@@ -3265,11 +3350,13 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       />
 
       {/* Share Modal */}
-      <ShareModal
-        isOpen={isShareModalOpen}
-        onClose={() => setIsShareModalOpen(false)}
+      {!isReadOnly && (
+        <ShareModal
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
         board={board}
-      />
+        />
+      )}
 
       {/* Text Edit Modal */}
       <InputModal
