@@ -46,7 +46,7 @@ import MarkdownEditModal from './MarkdownEditModal'
 import ThemeToggle from './ThemeToggle'
 import KonvaText from './KonvaText'
 import TiptapManager from './TiptapManager'
-import { TextEditorProvider } from '../hooks/useTextEditor'
+import { TextEditorProvider, useTextEditor } from '../hooks/useTextEditor'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useRealtimeSync } from '@/hooks/useRealtimeSync'
 import { usePresence } from '@/hooks/usePresence'
@@ -372,9 +372,10 @@ interface WhiteboardElement extends Element {
   konvaRef?: Konva.Node
 }
 
-function WhiteboardViewInner({ board, accessLevel = 'admin' }: WhiteboardViewProps) {
+function WhiteboardViewInner({ board, accessLevel = 'admin', updateElementRef }: WhiteboardViewProps & { updateElementRef?: React.MutableRefObject<((elementId: string, updates: Record<string, unknown>) => void) | null> }) {
   const stageRef = useRef<Konva.Stage>(null)
   const supabase = createClient()
+  const { setStageInfo } = useTextEditor()
   const { 
     elements, 
     setElements, 
@@ -445,6 +446,26 @@ function WhiteboardViewInner({ board, accessLevel = 'admin' }: WhiteboardViewPro
   // Panning state for two-finger/middle-mouse panning
   const [isPanning, setIsPanning] = useState(false)
   const [panStart, setPanStart] = useState<{ x: number; y: number; stageX: number; stageY: number } | null>(null)
+
+  // Update stage info for text editor
+  useEffect(() => {
+    const stage = stageRef.current
+    if (stage && stage.container()) {
+      setStageInfo({
+        container: stage.container() as HTMLDivElement,
+        scale: stageScale,
+        position: stagePos
+      })
+    }
+  }, [stageScale, stagePos, setStageInfo])
+
+
+  // Set up the updateElement ref for the parent component
+  useEffect(() => {
+    if (updateElementRef) {
+      updateElementRef.current = updateElement
+    }
+  }, [updateElement, updateElementRef])
 
   // Auto-select appropriate color when switching tools
   const handleToolChange = (toolType: ToolType) => {
@@ -3476,26 +3497,23 @@ function WhiteboardViewInner({ board, accessLevel = 'admin' }: WhiteboardViewPro
 }
 
 export default function WhiteboardView(props: WhiteboardViewProps) {
-  const [stageContainer, setStageContainer] = useState<HTMLDivElement | null>(null)
-  const [stageScale, setStageScale] = useState(1)
-  const [stagePosition, setStagePosition] = useState({ x: 0, y: 0 })
+  // This ref will hold the updateElement function from the inner component
+  const updateElementRef = useRef<((elementId: string, updates: Record<string, unknown>) => void) | null>(null)
 
-  // Handle save function for text editor
   const handleTextSave = useCallback((elementId: string, content: string) => {
-    // This will be passed down to the inner component through context if needed
-    // For now, we'll need to access the updateElement function from the inner component
-    console.log('Text saved:', elementId, content)
+    if (updateElementRef.current) {
+      updateElementRef.current(elementId, {
+        properties: {
+          text: content
+        }
+      })
+    }
   }, [])
 
   return (
-    <TextEditorProvider>
-      <WhiteboardViewInner {...props} />
-      <TiptapManager
-        onSave={handleTextSave}
-        stageContainer={stageContainer}
-        stageScale={stageScale}
-        stagePosition={stagePosition}
-      />
+    <TextEditorProvider onSave={handleTextSave}>
+      <WhiteboardViewInner {...props} updateElementRef={updateElementRef} />
+      <TiptapManager onSave={handleTextSave} />
     </TextEditorProvider>
   )
 }

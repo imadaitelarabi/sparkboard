@@ -6,18 +6,15 @@ import TiptapEditor, { TiptapEditorRef } from './TiptapEditor'
 
 interface TiptapManagerProps {
   onSave: (elementId: string, content: string) => void
-  stageContainer?: HTMLDivElement | null
-  stageScale?: number
-  stagePosition?: { x: number; y: number }
 }
 
-export default function TiptapManager({ onSave, stageContainer, stageScale = 1, stagePosition = { x: 0, y: 0 } }: TiptapManagerProps) {
-  const { state, updateContent, saveContent, stopEditing } = useTextEditor()
+export default function TiptapManager({ onSave }: TiptapManagerProps) {
+  const { state, stageInfo, updateContent, saveContent, stopEditing } = useTextEditor()
   const editorRef = useRef<TiptapEditorRef>(null)
 
   const handleSave = useCallback(() => {
-    saveContent(onSave)
-  }, [saveContent, onSave])
+    saveContent()
+  }, [saveContent])
 
   const handleCancel = useCallback(() => {
     stopEditing()
@@ -42,16 +39,16 @@ export default function TiptapManager({ onSave, stageContainer, stageScale = 1, 
     }
   }, [state.isEditing])
 
-  if (!state.isEditing || !state.position || !stageContainer) {
+  if (!state.isEditing || !state.position || !stageInfo.container) {
     return null
   }
 
   // Calculate absolute position
-  const containerRect = stageContainer.getBoundingClientRect()
-  const absoluteX = containerRect.left + (state.position.x * stageScale) + stagePosition.x
-  const absoluteY = containerRect.top + (state.position.y * stageScale) + stagePosition.y
-  const scaledWidth = state.position.width * stageScale
-  const scaledHeight = state.position.height * stageScale
+  const containerRect = stageInfo.container.getBoundingClientRect()
+  const absoluteX = containerRect.left + (state.position.x * stageInfo.scale) + stageInfo.position.x
+  const absoluteY = containerRect.top + (state.position.y * stageInfo.scale) + stageInfo.position.y
+  const scaledWidth = state.position.width * stageInfo.scale
+  const scaledHeight = state.position.height * stageInfo.scale
 
   return (
     <div
@@ -76,7 +73,7 @@ export default function TiptapManager({ onSave, stageContainer, stageScale = 1, 
         className="embedded h-full"
         style={{
           height: '100%',
-          fontSize: state.fontSize * stageScale,
+          fontSize: state.fontSize * stageInfo.scale,
           fontFamily: state.fontFamily,
           color: state.color,
         }}

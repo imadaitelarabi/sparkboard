@@ -12,21 +12,30 @@ interface TextEditorState {
   color: string
 }
 
+interface StageInfo {
+  container: HTMLDivElement | null
+  scale: number
+  position: { x: number; y: number }
+}
+
 interface TextEditorContextType {
   state: TextEditorState
+  stageInfo: StageInfo
   startEditing: (elementId: string, content: string, position: { x: number; y: number; width: number; height: number }, options: { fontSize: number; fontFamily: string; color: string }) => void
   stopEditing: () => void
   updateContent: (content: string) => void
   saveContent: (onSave: (elementId: string, content: string) => void) => void
+  setStageInfo: (stageInfo: StageInfo) => void
 }
 
 const TextEditorContext = createContext<TextEditorContextType | null>(null)
 
 interface TextEditorProviderProps {
   children: ReactNode
+  onSave?: (elementId: string, content: string) => void
 }
 
-export function TextEditorProvider({ children }: TextEditorProviderProps) {
+export function TextEditorProvider({ children, onSave }: TextEditorProviderProps) {
   const [state, setState] = useState<TextEditorState>({
     isEditing: false,
     elementId: null,
@@ -35,6 +44,12 @@ export function TextEditorProvider({ children }: TextEditorProviderProps) {
     fontSize: 16,
     fontFamily: 'Arial, sans-serif',
     color: '#000000'
+  })
+
+  const [stageInfo, setStageInfo] = useState<StageInfo>({
+    container: null,
+    scale: 1,
+    position: { x: 0, y: 0 }
   })
 
   const startEditing = useCallback((
@@ -70,19 +85,24 @@ export function TextEditorProvider({ children }: TextEditorProviderProps) {
     }))
   }, [])
 
-  const saveContent = useCallback((onSave: (elementId: string, content: string) => void) => {
+  const saveContent = useCallback((fallbackOnSave?: (elementId: string, content: string) => void) => {
     if (state.elementId && state.content !== undefined) {
-      onSave(state.elementId, state.content)
+      const saveHandler = onSave || fallbackOnSave
+      if (saveHandler) {
+        saveHandler(state.elementId, state.content)
+      }
     }
     stopEditing()
-  }, [state.elementId, state.content, stopEditing])
+  }, [state.elementId, state.content, stopEditing, onSave])
 
   const value: TextEditorContextType = {
     state,
+    stageInfo,
     startEditing,
     stopEditing,
     updateContent,
-    saveContent
+    saveContent,
+    setStageInfo
   }
 
   return (
