@@ -27,7 +27,8 @@ import {
   CornerRightDown,
   ClipboardCopy,
   Group,
-  Ungroup
+  Ungroup,
+  Share
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { imageUploadService } from '@/lib/image-upload'
@@ -46,7 +47,10 @@ import ThemeToggle from './ThemeToggle'
 import MarkdownText from './MarkdownText'
 import MarkdownToolbar from './MarkdownToolbar'
 import InlineMarkdownEditor from './InlineMarkdownEditor'
+import ShareModal from './ShareModal'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import { useRealtimeSync } from '@/hooks/useRealtimeSync'
+import { usePresence } from '@/hooks/usePresence'
 import { cameraStorage } from '@/utils/cameraStorage'
 
 type Tables = Database['public']['Tables']
@@ -384,8 +388,13 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     canUndo,
     canRedo,
     clearHistory,
-    saveToHistory
+    saveToHistory,
+    connectionStatus
   } = useAppStore()
+
+  // Realtime hooks
+  const { isConnected } = useRealtimeSync(board.id)
+  const { updateCursor, otherCursors, userColor, onlineUsers } = usePresence(board.id)
 
   const [activeTool, setActiveTool] = useState<ToolType>('select')
   const [stageScale, setStageScale] = useState(1)
@@ -406,6 +415,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     originalBounds: { x: number; y: number; width: number; height: number } | null;
   }>({ isResizing: false, elementId: null, handleType: null, startPointer: null, originalBounds: null })
   const [showComingSoonModal, setShowComingSoonModal] = useState(false)
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [draggedElements, setDraggedElements] = useState<Set<string>>(new Set())
   const [dragStartPositions, setDragStartPositions] = useState<Map<string, { x: number; y: number }>>(new Map())
@@ -484,7 +494,10 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
                 aspectRatio: result.aspectRatio
               },
               layer_index: elements.length,
-              created_by: (user as { id: string } | null)?.id || ''
+              created_by: (user as { id: string } | null)?.id || '',
+              last_modified_by: (user as { id: string } | null)?.id || '',
+              last_modified_at: new Date().toISOString(),
+              version: 1
             }
 
             const { data, error } = await supabase
@@ -524,7 +537,10 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
         rotation: element.rotation,
         properties: element.properties,
         layer_index: elements.length + newElements.length,
-        created_by: (user as { id: string } | null)?.id || ''
+        created_by: (user as { id: string } | null)?.id || '',
+        last_modified_by: (user as { id: string } | null)?.id || '',
+        last_modified_at: new Date().toISOString(),
+        version: 1
       }
 
       try {
@@ -580,7 +596,10 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
               aspectRatio: result.aspectRatio
             },
             layer_index: elements.length,
-            created_by: (user as { id: string } | null)?.id || ''
+            created_by: (user as { id: string } | null)?.id || '',
+            last_modified_by: (user as { id: string } | null)?.id || '',
+            last_modified_at: new Date().toISOString(),
+            version: 1
           }
 
           const { data, error } = await supabase
@@ -621,7 +640,10 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
         rotation: element.rotation,
         properties: element.properties,
         layer_index: elements.length + newElements.length,
-        created_by: (user as { id: string } | null)?.id || ''
+        created_by: (user as { id: string } | null)?.id || '',
+        last_modified_by: (user as { id: string } | null)?.id || '',
+        last_modified_at: new Date().toISOString(),
+        version: 1
       }
 
       try {
@@ -1335,7 +1357,10 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
         ...properties
       },
       layer_index: elements.length,
-      created_by: (user as { id: string } | null)?.id || ''
+      created_by: (user as { id: string } | null)?.id || '',
+      last_modified_by: (user as { id: string } | null)?.id || '',
+      last_modified_at: new Date().toISOString(),
+      version: 1
     }
 
     try {
@@ -2098,6 +2123,9 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     
     const pointer = stage.getPointerPosition()
     if (!pointer) return
+
+    // Update cursor position for presence tracking
+    updateCursor(pointer.x, pointer.y, activeTool)
     
     // Handle element resizing
     if (resizeState.isResizing) {
@@ -2777,8 +2805,21 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       <div className="flex-1 flex flex-col">
         {/* Toolbar */}
         <div className="whimsical-card border-b border-purple-200 dark:border-purple-700 p-3 flex items-center justify-between">
-          <div className="text-sm font-medium text-purple-700 dark:text-purple-300">
-            {board.name} - Whiteboard
+          <div className="flex items-center gap-4">
+            <div className="text-sm font-medium text-purple-700 dark:text-purple-300">
+              {board.name} - Whiteboard
+            </div>
+            {/* Connection status indicator */}
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${
+                connectionStatus === 'connected' ? 'bg-green-500' :
+                connectionStatus === 'connecting' ? 'bg-yellow-500' :
+                'bg-red-500'
+              }`} />
+              <span className="text-xs text-gray-600 dark:text-gray-400">
+                {onlineUsers > 1 ? `${onlineUsers} online` : 'Offline'}
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             {/* Style Options for Selected Elements */}
@@ -2920,6 +2961,13 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
                 </div>
               )}
             </div>
+            <button
+              onClick={() => setIsShareModalOpen(true)}
+              className="p-2 rounded-md bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800/50 transition-colors"
+              title="Share Board"
+            >
+              <Share className="w-5 h-5" />
+            </button>
             <ThemeToggle />
           </div>
         </div>
@@ -3190,6 +3238,42 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
                 perfectDrawEnabled={false}
               />
             )}
+
+            {/* Other users' cursors */}
+            {otherCursors.map((cursor) => (
+              <React.Fragment key={cursor.user_id}>
+                {/* Cursor pointer */}
+                <Arrow
+                  x={cursor.cursor_x}
+                  y={cursor.cursor_y}
+                  points={[0, 0, 0, 20, 5, 15, 12, 22]}
+                  fill={cursor.user_color}
+                  stroke={cursor.user_color}
+                  strokeWidth={1}
+                  listening={false}
+                />
+                {/* Cursor label */}
+                <Text
+                  x={cursor.cursor_x + 15}
+                  y={cursor.cursor_y}
+                  text={cursor.user_name || `User ${cursor.user_id.slice(0, 8)}`}
+                  fontSize={12}
+                  fill="white"
+                  padding={4}
+                  cornerRadius={4}
+                  listening={false}
+                />
+                <Rect
+                  x={cursor.cursor_x + 15}
+                  y={cursor.cursor_y}
+                  width={100} // Approximate width
+                  height={20}
+                  fill={cursor.user_color}
+                  cornerRadius={4}
+                  listening={false}
+                />
+              </React.Fragment>
+            ))}
           </Layer>
         </Stage>
         </div>
@@ -3205,6 +3289,13 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
         onTaskCreated={() => {
           // Optional: Show success message or refresh data
         }}
+      />
+
+      {/* Share Modal */}
+      <ShareModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        board={board}
       />
 
       {/* Text Edit Modal */}

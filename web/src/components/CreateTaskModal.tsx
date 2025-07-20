@@ -6,6 +6,7 @@ import Modal from './Modal'
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
 import { Database } from '@/types/database.types'
+import { ElementProperties } from '@/types/element.types'
 
 type Tables = Database['public']['Tables']
 type TaskCategory = Tables['task_categories']['Row']
@@ -24,7 +25,8 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
     clearSelection, 
     addTask,
     user,
-    elements 
+    elements,
+    updateElement 
   } = useAppStore()
   
   const [loading, setLoading] = useState(false)
@@ -163,6 +165,58 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
     return { title: '', description: '' }
   }, [selectedElementIds, elements])
 
+  // Automatically group selected elements
+  const autoGroupSelectedElements = useCallback(async () => {
+    if (selectedElementIds.length < 2) return
+
+    const selectedElements = elements.filter(el => selectedElementIds.includes(el.id))
+    if (selectedElements.length < 2) return
+
+    // Check if elements are already grouped
+    const existingGroups = new Set<string>()
+    selectedElements.forEach(element => {
+      const properties = element.properties as ElementProperties
+      if (properties?.groupId) {
+        existingGroups.add(properties.groupId)
+      }
+    })
+
+    // If all elements are already in the same group, don't create a new group
+    if (existingGroups.size === 1 && selectedElements.every(el => {
+      const properties = el.properties as ElementProperties
+      return properties?.groupId && existingGroups.has(properties.groupId)
+    })) {
+      return
+    }
+
+    // Create a new group for the elements
+    const groupId = crypto.randomUUID()
+
+    // Update all selected elements with the same group ID
+    for (const element of selectedElements) {
+      const properties = element.properties as ElementProperties || {}
+      const updatedProperties = {
+        ...properties,
+        groupId,
+        isGroupLeader: element === selectedElements[0] // First element is the group leader
+      }
+      
+      try {
+        const { error } = await supabase
+          .from('elements')
+          .update({ properties: updatedProperties })
+          .eq('id', element.id)
+
+        if (error) throw error
+
+        // Update local state
+        updateElement(element.id, { properties: updatedProperties })
+      } catch (error) {
+        console.error('Error grouping element:', error)
+      }
+    }
+  }, [selectedElementIds, elements, supabase, updateElement])
+
   useEffect(() => {
     if (isOpen && currentProject) {
       loadCategories()
@@ -221,6 +275,9 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
           .insert(elementLinks)
 
         if (linkError) throw linkError
+
+        // Automatically group the elements if there are multiple
+        await autoGroupSelectedElements()
       }
 
       // Update local state
@@ -366,6 +423,11 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
           <div className="bg-[var(--color-accent)] p-3 rounded-[var(--radius-md)]">
             <p className="text-sm text-[var(--color-accent-foreground)]">
               This task will be linked to {selectedElementIds.length} whiteboard element{selectedElementIds.length !== 1 ? 's' : ''}.
+              {selectedElementIds.length > 1 && (
+                <span className="block mt-1 font-medium">
+                  💡 Multiple elements will be automatically grouped together.
+                </span>
+              )}
             </p>
           </div>
         )}

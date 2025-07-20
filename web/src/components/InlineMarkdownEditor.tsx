@@ -155,9 +155,7 @@ export default function InlineMarkdownEditor({
         placeholder="Type your markdown text..."
         spellCheck={false}
       />
-      <div className="absolute -bottom-6 left-0 right-0 text-xs text-[var(--color-muted-foreground)] text-center bg-[var(--color-card)] px-2 py-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] shadow-[var(--shadow-sm)]">
-        Enter to save • Shift+Enter for new line • Esc to cancel
-      </div>
+
     </div>
   )
 }

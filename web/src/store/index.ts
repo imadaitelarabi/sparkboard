@@ -19,6 +19,8 @@ interface HistoryManager {
   maxHistorySize: number
 }
 
+type ConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'error'
+
 interface AppState {
   // Current user and auth
   user: unknown | null
@@ -47,6 +49,14 @@ interface AppState {
   updateElement: (id: string, updates: Partial<Element>) => void
   updateElementSilent: (id: string, updates: Partial<Element>) => void // Update without history
   removeElement: (id: string) => void
+  
+  // Realtime-specific element actions
+  addElementSilent: (element: Element) => void // Add without history (for remote updates)
+  removeElementSilent: (id: string) => void // Remove without history (for remote updates)
+
+  // Realtime connection status
+  connectionStatus: ConnectionStatus
+  setConnectionStatus: (status: ConnectionStatus) => void
 
   // History management
   history: HistoryManager
@@ -226,6 +236,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       elements: state.elements.filter(el => el.id !== id)
     }))
   },
+  addElementSilent: (element) => {
+    set((state) => ({ 
+      elements: [...state.elements, element] 
+    }))
+  },
+  removeElementSilent: (id) => {
+    set((state) => ({
+      elements: state.elements.filter(el => el.id !== id)
+    }))
+  },
+
+  // Realtime connection status
+  connectionStatus: 'disconnected',
+  setConnectionStatus: (status) => set({ connectionStatus: status }),
 
   // Tasks
   tasks: [],

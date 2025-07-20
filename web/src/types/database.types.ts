@@ -34,6 +34,91 @@ export type Database = {
   }
   public: {
     Tables: {
+      board_members: {
+        Row: {
+          board_id: string
+          created_at: string | null
+          id: string
+          invited_by: string | null
+          role: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          board_id: string
+          created_at?: string | null
+          id?: string
+          invited_by?: string | null
+          role: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          board_id?: string
+          created_at?: string | null
+          id?: string
+          invited_by?: string | null
+          role?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "board_members_board_id_fkey"
+            columns: ["board_id"]
+            isOneToOne: false
+            referencedRelation: "boards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      board_shares: {
+        Row: {
+          access_level: string
+          board_id: string
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          is_public: boolean | null
+          password_hash: string | null
+          share_token: string
+          shared_by: string
+          updated_at: string | null
+        }
+        Insert: {
+          access_level: string
+          board_id: string
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          is_public?: boolean | null
+          password_hash?: string | null
+          share_token?: string
+          shared_by: string
+          updated_at?: string | null
+        }
+        Update: {
+          access_level?: string
+          board_id?: string
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          is_public?: boolean | null
+          password_hash?: string | null
+          share_token?: string
+          shared_by?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "board_shares_board_id_fkey"
+            columns: ["board_id"]
+            isOneToOne: false
+            referencedRelation: "boards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       boards: {
         Row: {
           created_at: string | null
@@ -79,11 +164,14 @@ export type Database = {
           created_by: string | null
           height: number | null
           id: string
+          last_modified_at: string | null
+          last_modified_by: string
           layer_index: number | null
           properties: Json | null
           rotation: number | null
           type: string
           updated_at: string | null
+          version: number
           width: number | null
           x: number | null
           y: number | null
@@ -94,11 +182,14 @@ export type Database = {
           created_by?: string | null
           height?: number | null
           id?: string
+          last_modified_at?: string | null
+          last_modified_by: string
           layer_index?: number | null
           properties?: Json | null
           rotation?: number | null
           type: string
           updated_at?: string | null
+          version?: number
           width?: number | null
           x?: number | null
           y?: number | null
@@ -109,11 +200,14 @@ export type Database = {
           created_by?: string | null
           height?: number | null
           id?: string
+          last_modified_at?: string | null
+          last_modified_by?: string
           layer_index?: number | null
           properties?: Json | null
           rotation?: number | null
           type?: string
           updated_at?: string | null
+          version?: number
           width?: number | null
           x?: number | null
           y?: number | null
@@ -127,6 +221,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      invitations: {
+        Row: {
+          accepted_at: string | null
+          created_at: string | null
+          email: string
+          expires_at: string
+          id: string
+          invited_by: string
+          resource_id: string
+          resource_type: string
+          role: string
+          token: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string | null
+          email: string
+          expires_at?: string
+          id?: string
+          invited_by: string
+          resource_id: string
+          resource_type: string
+          role: string
+          token?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string | null
+          email?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string
+          resource_id?: string
+          resource_type?: string
+          role?: string
+          token?: string
+        }
+        Relationships: []
       }
       project_members: {
         Row: {
@@ -338,6 +471,59 @@ export type Database = {
           },
         ]
       }
+      user_presence: {
+        Row: {
+          active_tool: string | null
+          board_id: string
+          created_at: string | null
+          cursor_x: number | null
+          cursor_y: number | null
+          id: string
+          is_online: boolean | null
+          last_seen: string | null
+          metadata: Json | null
+          updated_at: string | null
+          user_color: string | null
+          user_id: string
+        }
+        Insert: {
+          active_tool?: string | null
+          board_id: string
+          created_at?: string | null
+          cursor_x?: number | null
+          cursor_y?: number | null
+          id?: string
+          is_online?: boolean | null
+          last_seen?: string | null
+          metadata?: Json | null
+          updated_at?: string | null
+          user_color?: string | null
+          user_id: string
+        }
+        Update: {
+          active_tool?: string | null
+          board_id?: string
+          created_at?: string | null
+          cursor_x?: number | null
+          cursor_y?: number | null
+          id?: string
+          is_online?: boolean | null
+          last_seen?: string | null
+          metadata?: Json | null
+          updated_at?: string | null
+          user_color?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_presence_board_id_fkey"
+            columns: ["board_id"]
+            isOneToOne: false
+            referencedRelation: "boards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_profiles: {
         Row: {
           avatar_url: string | null
@@ -373,12 +559,28 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cleanup_expired_shares: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      cleanup_stale_presence: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       is_project_member: {
-        Args: { project_uuid: string; user_uuid: string }
+        Args: { user_uuid: string; project_uuid: string }
         Returns: boolean
       }
       is_project_owner: {
         Args: { user_uuid: string; project_uuid: string }
+        Returns: boolean
+      }
+      user_can_edit_board: {
+        Args: { board_uuid: string; user_uuid?: string }
+        Returns: boolean
+      }
+      user_has_board_access: {
+        Args: { board_uuid: string; user_uuid?: string }
         Returns: boolean
       }
     }

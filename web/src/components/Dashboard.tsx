@@ -133,7 +133,9 @@ export default function Dashboard() {
       <header className="bg-card border-b border-border px-5 py-3">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-foreground">SparkBoard</h1>
+            <div className="flex items-center gap-2">
+              <img src="/logo.png" alt="SparkBoard Logo" className="h-16 w-50" />
+            </div>
             <p className="text-muted-foreground text-sm">Dashboard</p>
           </div>
           <div className="flex items-center gap-3">
