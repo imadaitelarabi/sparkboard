@@ -25,7 +25,9 @@ import {
   ArrowDown,
   CornerRightUp,
   CornerRightDown,
-  ClipboardCopy
+  ClipboardCopy,
+  Group,
+  Ungroup
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { imageUploadService } from '@/lib/image-upload'
@@ -406,6 +408,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   const [showComingSoonModal, setShowComingSoonModal] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [draggedElements, setDraggedElements] = useState<Set<string>>(new Set())
+  const [dragStartPositions, setDragStartPositions] = useState<Map<string, { x: number; y: number }>>(new Map())
   
   // Zoom state for better control
   const [isZooming, setIsZooming] = useState(false)
@@ -640,6 +643,66 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     setSelectedElementIds(newElements.map(el => el.id))
   }
 
+  // Group selected elements
+  const groupElements = async () => {
+    const selectedElements = elements.filter(el => selectedElementIds.includes(el.id))
+    if (selectedElements.length < 2) return
+
+    saveToHistory()
+    const groupId = crypto.randomUUID()
+
+    // Update all selected elements with the same group ID
+    for (const element of selectedElements) {
+      const properties = element.properties as ElementProperties || {}
+      const updatedProperties = {
+        ...properties,
+        groupId,
+        isGroupLeader: element === selectedElements[0] // First element is the group leader
+      }
+      
+      try {
+        await updateElementInDB(element.id, { properties: updatedProperties })
+        updateElementSilent(element.id, { properties: updatedProperties })
+      } catch (error) {
+        console.error('Error grouping element:', error)
+      }
+    }
+  }
+
+  // Ungroup selected elements
+  const ungroupElements = async () => {
+    const selectedElements = elements.filter(el => selectedElementIds.includes(el.id))
+    if (selectedElements.length === 0) return
+
+    saveToHistory()
+
+    // Find all elements that belong to the same groups as selected elements
+    const groupIds = new Set<string>()
+    selectedElements.forEach(element => {
+      const properties = element.properties as ElementProperties
+      if (properties?.groupId) {
+        groupIds.add(properties.groupId)
+      }
+    })
+
+    // Remove group properties from all elements in these groups
+    for (const element of elements) {
+      const properties = element.properties as ElementProperties
+      if (properties?.groupId && groupIds.has(properties.groupId)) {
+        const updatedProperties = { ...properties }
+        delete updatedProperties.groupId
+        delete updatedProperties.isGroupLeader
+        
+        try {
+          await updateElementInDB(element.id, { properties: updatedProperties })
+          updateElementSilent(element.id, { properties: updatedProperties })
+        } catch (error) {
+          console.error('Error ungrouping element:', error)
+        }
+      }
+    }
+  }
+
   // Keyboard shortcuts for whiteboard
   useKeyboardShortcuts([
     // Tool selection shortcuts
@@ -720,6 +783,30 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
         setSelectedElementIds(allElementIds)
       },
       description: 'Select all elements',
+      preventDefault: true
+    },
+    // Grouping shortcuts
+    {
+      key: 'g',
+      ctrlKey: true,
+      callback: () => {
+        if (selectedElementIds.length > 1) {
+          groupElements()
+        }
+      },
+      description: 'Group selected elements',
+      preventDefault: true
+    },
+    {
+      key: 'g',
+      ctrlKey: true,
+      shiftKey: true,
+      callback: () => {
+        if (selectedElementIds.length > 0) {
+          ungroupElements()
+        }
+      },
+      description: 'Ungroup selected elements',
       preventDefault: true
     },
     // Zoom and navigation
@@ -1618,6 +1705,70 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
         
         <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
         
+        {/* Group Management */}
+        {selectedCount > 1 && (
+          <button
+            onClick={() => {
+              groupElements()
+              setContextMenu(null)
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-all"
+            style={{
+              color: 'var(--color-card-foreground)',
+              transitionDuration: 'var(--duration-normal)'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(16, 185, 129, 0.1)'
+              e.currentTarget.style.opacity = '0.8'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+              e.currentTarget.style.opacity = '1'
+            }}
+          >
+            <Group className="h-4 w-4" />
+            Group ({selectedCount})
+          </button>
+        )}
+        
+        {/* Show ungroup if any selected element is in a group */}
+        {selectedElementIds.some(id => {
+          const element = elements.find(el => el.id === id)
+          const properties = element?.properties as ElementProperties
+          return properties?.groupId
+        }) && (
+          <button
+            onClick={() => {
+              ungroupElements()
+              setContextMenu(null)
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-all"
+            style={{
+              color: 'var(--color-card-foreground)',
+              transitionDuration: 'var(--duration-normal)'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(16, 185, 129, 0.1)'
+              e.currentTarget.style.opacity = '0.8'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+              e.currentTarget.style.opacity = '1'
+            }}
+          >
+            <Ungroup className="h-4 w-4" />
+            Ungroup
+          </button>
+        )}
+        
+        {(selectedCount > 1 || selectedElementIds.some(id => {
+          const element = elements.find(el => el.id === id)
+          const properties = element?.properties as ElementProperties
+          return properties?.groupId
+        })) && (
+          <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
+        )}
+        
         {/* Delete */}
         <button
           onClick={() => {
@@ -1725,10 +1876,29 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     setContextMenu(null)
     
     if (activeTool === 'select') {
+      // Get the clicked element to check if it's part of a group
+      const clickedElement = elements.find(el => el.id === elementId)
+      const clickedProperties = clickedElement?.properties as ElementProperties
+      
+      // If the element is part of a group, select all group members
+      const groupMembers = clickedProperties?.groupId 
+        ? elements.filter(el => {
+            const props = el.properties as ElementProperties
+            return props?.groupId === clickedProperties.groupId
+          }).map(el => el.id)
+        : []
+      
       if (e.evt.shiftKey) {
-        toggleElementSelection(elementId)
+        if (groupMembers.length > 0) {
+          // Toggle all group members
+          groupMembers.forEach(id => toggleElementSelection(id))
+        } else {
+          toggleElementSelection(elementId)
+        }
       } else {
-        setSelectedElementIds([elementId])
+        // Select the element or all group members
+        const elementsToSelect = groupMembers.length > 0 ? groupMembers : [elementId]
+        setSelectedElementIds(elementsToSelect)
       }
     }
   }
@@ -1758,7 +1928,42 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
     if (!isDragging) {
       saveToHistory()
       setIsDragging(true)
-      setDraggedElements(new Set([elementId]))
+      
+      let elementsToMove: string[]
+      
+      // Get the dragged element to check if it's part of a group
+      const draggedElement = elements.find(el => el.id === elementId)
+      const draggedProperties = draggedElement?.properties as ElementProperties
+      
+      // If the element is part of a group, include all group members
+      const groupMembers = draggedProperties?.groupId 
+        ? elements.filter(el => {
+            const props = el.properties as ElementProperties
+            return props?.groupId === draggedProperties.groupId
+          }).map(el => el.id)
+        : []
+      
+      // If the dragged element is part of a selection, drag all selected elements
+      if (selectedElementIds.includes(elementId)) {
+        elementsToMove = [...new Set([...selectedElementIds, ...groupMembers])]
+        setDraggedElements(new Set(elementsToMove))
+      } else {
+        // If dragging a non-selected element, include its group members
+        const elementsToSelect = groupMembers.length > 0 ? groupMembers : [elementId]
+        setSelectedElementIds(elementsToSelect)
+        elementsToMove = elementsToSelect
+        setDraggedElements(new Set(elementsToSelect))
+      }
+      
+      // Store initial positions for all elements that will be moved
+      const initialPositions = new Map<string, { x: number; y: number }>()
+      elementsToMove.forEach(id => {
+        const element = elements.find(el => el.id === id)
+        if (element) {
+          initialPositions.set(id, { x: element.x || 0, y: element.y || 0 })
+        }
+      })
+      setDragStartPositions(initialPositions)
     } else {
       // Add to dragged elements if multi-select drag
       setDraggedElements(prev => new Set([...prev, elementId]))
@@ -1766,23 +1971,42 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   }
   
   function handleElementDrag(elementId: string, newAttrs: { x: number; y: number }) {
-    // Update position without saving to history during drag
-    updateElementSilent(elementId, { x: newAttrs.x, y: newAttrs.y })
+    // Get the original position of the dragged element
+    const originalPos = dragStartPositions.get(elementId)
+    if (!originalPos) {
+      // Fallback: just update this element
+      updateElementSilent(elementId, { x: newAttrs.x, y: newAttrs.y })
+      return
+    }
+    
+    // Calculate the offset from original position
+    const deltaX = newAttrs.x - originalPos.x
+    const deltaY = newAttrs.y - originalPos.y
+    
+    // Move all dragged elements by the same offset
+    draggedElements.forEach(id => {
+      const startPos = dragStartPositions.get(id)
+      if (startPos) {
+        const newX = startPos.x + deltaX
+        const newY = startPos.y + deltaY
+        updateElementSilent(id, { x: newX, y: newY })
+      }
+    })
   }
 
   function handleElementDragEnd(elementId: string, newAttrs: { x: number; y: number }) {
-    // Update database and reset drag state
-    updateElementInDB(elementId, { x: newAttrs.x, y: newAttrs.y })
-    
-    // Reset drag state when all dragged elements are done
-    setDraggedElements(prev => {
-      const newSet = new Set(prev)
-      newSet.delete(elementId)
-      if (newSet.size === 0) {
-        setIsDragging(false)
+    // Update database for all dragged elements with their final positions
+    draggedElements.forEach(id => {
+      const element = elements.find(el => el.id === id)
+      if (element) {
+        updateElementInDB(id, { x: element.x, y: element.y })
       }
-      return newSet
     })
+    
+    // Reset drag state
+    setIsDragging(false)
+    setDraggedElements(new Set())
+    setDragStartPositions(new Map())
   }
 
   function handleWheel(e: Konva.KonvaEventObject<WheelEvent>) {
@@ -2160,15 +2384,49 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   }
 
 
+  // Helper function to get group information
+  function getGroupInfo(elementId: string) {
+    const element = elements.find(el => el.id === elementId)
+    const props = element?.properties as ElementProperties
+    const groupId = props?.groupId
+    
+    if (!groupId) return null
+    
+    const groupMembers = elements.filter(el => {
+      const memberProps = el.properties as ElementProperties
+      return memberProps?.groupId === groupId
+    })
+    
+    return {
+      groupId,
+      memberCount: groupMembers.length,
+      isGroupLeader: props?.isGroupLeader || false,
+      members: groupMembers
+    }
+  }
+
   function renderElement(element: WhiteboardElement) {
     const isSelected = selectedElementIds.includes(element.id)
     const props = element.properties as ElementProperties || {}
+    const groupInfo = getGroupInfo(element.id)
+    const isGrouped = !!groupInfo
 
     // Get effective style values
     const fillOpacity = getEffectiveFillOpacity(props)
     const strokeOpacity = getEffectiveStrokeOpacity(props)
-    const strokeWidth = isSelected ? 2 : (props.strokeWidth || 2)
-    const strokeColor = isSelected ? 'var(--color-primary-500)' : (props.stroke as string)
+    
+    // Enhanced stroke styling for selection and grouping
+    let strokeWidth = props.strokeWidth || 2
+    let strokeColor = props.stroke as string
+    
+    if (isSelected) {
+      strokeWidth = 2
+      strokeColor = 'var(--color-primary-500)'
+    } else if (isGrouped) {
+      strokeWidth = 1.5
+      strokeColor = 'var(--color-accent-300)' // Lighter accent color for groups
+    }
+    
     const dashArray = getStrokeDashArray(props.strokeStyle, strokeWidth)
     
     const baseProps = {
@@ -2762,6 +3020,119 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
             
             {/* Elements */}
             {elements.map(renderElement)}
+            
+            {/* Group boundaries */}
+            {(() => {
+              const groupsToRender = new Set<string>()
+              const groupBounds = new Map<string, { minX: number, minY: number, maxX: number, maxY: number, count: number, leaderElement?: WhiteboardElement }>()
+              
+              // Calculate bounds for each group
+              elements.forEach(element => {
+                const props = element.properties as ElementProperties
+                const groupId = props?.groupId
+                if (!groupId) return
+                
+                groupsToRender.add(groupId)
+                
+                const x = element.x || 0
+                const y = element.y || 0
+                const width = element.width || 0
+                const height = element.height || 0
+                
+                if (groupBounds.has(groupId)) {
+                  const bounds = groupBounds.get(groupId)!
+                  bounds.minX = Math.min(bounds.minX, x)
+                  bounds.minY = Math.min(bounds.minY, y)
+                  bounds.maxX = Math.max(bounds.maxX, x + width)
+                  bounds.maxY = Math.max(bounds.maxY, y + height)
+                  bounds.count++
+                  if (props?.isGroupLeader) {
+                    bounds.leaderElement = element
+                  }
+                } else {
+                  groupBounds.set(groupId, {
+                    minX: x,
+                    minY: y,
+                    maxX: x + width,
+                    maxY: y + height,
+                    count: 1,
+                    leaderElement: props?.isGroupLeader ? element : undefined
+                  })
+                }
+              })
+              
+              return Array.from(groupsToRender).map(groupId => {
+                const bounds = groupBounds.get(groupId)
+                if (!bounds) return null
+                
+                // Check if any group member is selected
+                const hasSelectedMember = elements
+                  .filter(el => {
+                    const props = el.properties as ElementProperties
+                    return props?.groupId === groupId
+                  })
+                  .some(el => selectedElementIds.includes(el.id))
+                
+                // Don't show group boundary if any member is selected (to avoid visual clutter)
+                if (hasSelectedMember) return null
+                
+                const padding = 8 // Padding around grouped elements
+                const x = bounds.minX - padding
+                const y = bounds.minY - padding
+                const width = bounds.maxX - bounds.minX + padding * 2
+                const height = bounds.maxY - bounds.minY + padding * 2
+                
+                return (
+                  <React.Fragment key={`group-${groupId}`}>
+                    {/* Group boundary rectangle */}
+                    <Rect
+                      x={x}
+                      y={y}
+                      width={width}
+                      height={height}
+                      fill="rgba(16, 185, 129, 0.03)"
+                      stroke="#6ee7b7"
+                      strokeWidth={1.5 / stageScale}
+                      dash={[6 / stageScale, 6 / stageScale]}
+                      listening={false}
+                      perfectDrawEnabled={false}
+                      opacity={0.7}
+                      cornerRadius={4 / stageScale}
+                    />
+                    
+                    {/* Group count indicator */}
+                    <Rect
+                      x={x + width - 28 / stageScale}
+                      y={y - 14 / stageScale}
+                      width={24 / stageScale}
+                      height={18 / stageScale}
+                      fill="#10b981"
+                      stroke="#6ee7b7"
+                      strokeWidth={1 / stageScale}
+                      cornerRadius={4 / stageScale}
+                      listening={false}
+                      perfectDrawEnabled={false}
+                    />
+                    
+                    <Text
+                      x={x + width - 28 / stageScale}
+                      y={y - 14 / stageScale}
+                      width={24 / stageScale}
+                      height={18 / stageScale}
+                      text={bounds.count.toString()}
+                      fontSize={11 / stageScale}
+                      fontFamily="Inter, system-ui, sans-serif"
+                      fontWeight="600"
+                      fill="white"
+                      align="center"
+                      verticalAlign="middle"
+                      listening={false}
+                      perfectDrawEnabled={false}
+                    />
+                  </React.Fragment>
+                )
+              })
+            })()}
             
             {/* Selection borders and resize handles for selected elements */}
             {selectedElementIds.map(elementId => {

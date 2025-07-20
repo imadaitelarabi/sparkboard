@@ -46,6 +46,10 @@ export interface ElementProperties {
   imageUrl?: string // URL to the image in Supabase storage
   imageStoragePath?: string // Storage path for cleanup
   aspectRatio?: number // width/height for maintaining proportions
+  
+  // Group properties
+  groupId?: string // ID of the group this element belongs to
+  isGroupLeader?: boolean // Whether this element represents the group
 }
 
 // Helper type for element with typed properties
