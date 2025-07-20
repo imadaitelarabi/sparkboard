@@ -64,9 +64,9 @@ export default function AuthForm({ onSuccess }: AuthFormProps) {
   return (
     <div className="min-h-screen bg-background flex flex-col justify-center py-10 sm:px-5 lg:px-6">
       <div className="sm:mx-auto sm:w-full sm:max-w-sm">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-foreground mb-2">SparkBoard</h1>
-          <h2 className="text-lg text-muted-foreground">
+        <div className="flex flex-col items-center text-center">
+          <img src="/logo.png" alt="SparkBoard Logo" className="h-16 w-48 mx-auto" />
+          <h2 className="text-lg text-muted-foreground mt-2">
             {mode === 'login' ? 'Sign in to your account' : 'Create your account'}
           </h2>
         </div>

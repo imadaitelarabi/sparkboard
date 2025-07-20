@@ -2,12 +2,13 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, Plus, Settings, Users } from 'lucide-react'
+import { ArrowLeft, Plus, Settings, Users, Share } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
 import { Database } from '@/types/database.types'
 import dynamic from 'next/dynamic'
 import InputModal from './InputModal'
+import ShareModal from './ShareModal'
 
 const WhiteboardView = dynamic(() => import('./WhiteboardView'), { 
   ssr: false,
@@ -42,6 +43,7 @@ export default function ProjectLayout({ projectId }: ProjectLayoutProps) {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'whiteboard' | 'tasks'>('whiteboard')
   const [showCreateWhiteboardModal, setShowCreateWhiteboardModal] = useState(false)
+  const [showShareModal, setShowShareModal] = useState(false)
 
   useEffect(() => {
     loadProject()
@@ -217,6 +219,13 @@ export default function ProjectLayout({ projectId }: ProjectLayoutProps) {
           </div>
           
           <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setShowShareModal(true)}
+              className="p-2 hover:bg-accent rounded-md transition-colors"
+              title="Share Project"
+            >
+              <Share className="h-4 w-4 text-muted-foreground" />
+            </button>
             <button className="p-2 hover:bg-accent rounded-md transition-colors">
               <Users className="h-4 w-4 text-muted-foreground" />
             </button>
@@ -290,6 +299,17 @@ export default function ProjectLayout({ projectId }: ProjectLayoutProps) {
         placeholder="Enter whiteboard name..."
         submitText="Create Whiteboard"
       />
+
+      {/* Share Modal */}
+      {currentProject && (
+        <ShareModal
+          isOpen={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          project={currentProject}
+          boards={boards}
+          currentBoard={currentBoard || undefined}
+        />
+      )}
     </div>
   )
 }

@@ -28,7 +28,6 @@ import {
   ClipboardCopy,
   Group,
   Ungroup,
-  Share
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { imageUploadService } from '@/lib/image-upload'
@@ -47,7 +46,6 @@ import ThemeToggle from './ThemeToggle'
 import MarkdownText from './MarkdownText'
 import MarkdownToolbar from './MarkdownToolbar'
 import InlineMarkdownEditor from './InlineMarkdownEditor'
-import ShareModal from './ShareModal'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useRealtimeSync } from '@/hooks/useRealtimeSync'
 import { usePresence } from '@/hooks/usePresence'
@@ -417,7 +415,6 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
     originalBounds: { x: number; y: number; width: number; height: number } | null;
   }>({ isResizing: false, elementId: null, handleType: null, startPointer: null, originalBounds: null })
   const [showComingSoonModal, setShowComingSoonModal] = useState(false)
-  const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [draggedElements, setDraggedElements] = useState<Set<string>>(new Set())
   const [dragStartPositions, setDragStartPositions] = useState<Map<string, { x: number; y: number }>>(new Map())
@@ -3050,15 +3047,6 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
                 </div>
               )}
             </div>
-            {!isReadOnly && (
-              <button
-                onClick={() => setIsShareModalOpen(true)}
-                className="p-2 rounded-md bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800/50 transition-colors"
-                title="Share Board"
-              >
-                <Share className="w-5 h-5" />
-              </button>
-            )}
             <ThemeToggle />
           </div>
         </div>
@@ -3349,14 +3337,6 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
         }}
       />
 
-      {/* Share Modal */}
-      {!isReadOnly && (
-        <ShareModal
-          isOpen={isShareModalOpen}
-          onClose={() => setIsShareModalOpen(false)}
-        board={board}
-        />
-      )}
 
       {/* Text Edit Modal */}
       <InputModal

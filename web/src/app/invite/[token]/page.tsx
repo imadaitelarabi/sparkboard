@@ -21,7 +21,7 @@ interface InvitationData extends Invitation {
 export default function InvitationPage() {
   const params = useParams()
   const router = useRouter()
-  const token = params.token as string
+  const token = decodeURIComponent(params.token as string)
   
   const [invitation, setInvitation] = useState<InvitationData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -58,7 +58,7 @@ export default function InvitationPage() {
         .from('invitations')
         .select('*')
         .eq('token', token)
-        .single()
+        .maybeSingle()
 
       if (inviteError || !inviteData) {
         setError('This invitation is invalid or has expired.')
@@ -66,7 +66,7 @@ export default function InvitationPage() {
       }
 
       // Check if the invitation has expired
-      if (new Date(inviteData.expires_at) < new Date()) {
+      if (inviteData.expires_at && new Date(inviteData.expires_at) < new Date()) {
         setError('This invitation has expired.')
         return
       }
