@@ -55,6 +55,7 @@ export default function TiptapKonvaText({
 }: TiptapKonvaTextProps) {
   const [content, setContent] = useState(text)
   const [isEditMode, setIsEditMode] = useState(isEditing)
+  const [portalElement, setPortalElement] = useState<HTMLDivElement | null>(null)
   const editorRef = useRef<TiptapEditorRef>(null)
   const groupRef = useRef<Konva.Group>(null)
 
@@ -73,6 +74,58 @@ export default function TiptapKonvaText({
       }, 10)
     }
   }, [isEditing])
+
+  // Handle portal creation and positioning
+  useEffect(() => {
+    if (!isEditMode || typeof window === 'undefined') {
+      if (portalElement) {
+        setPortalElement(null)
+      }
+      return
+    }
+
+    // Create or get portal root
+    let portalRoot = document.getElementById('tiptap-portal')
+    if (!portalRoot) {
+      portalRoot = document.createElement('div')
+      portalRoot.id = 'tiptap-portal'
+      document.body.appendChild(portalRoot)
+    }
+
+    // Calculate position
+    const stage = groupRef.current?.getStage()
+    const stageContainer = stage?.container()
+    if (!stageContainer || !stage) return
+
+    const containerRect = stageContainer.getBoundingClientRect()
+    const stageScale = stage.scaleX() || 1
+    const stagePos = stage.position()
+
+    const absoluteX = containerRect.left + (x * stageScale) + (stagePos?.x || 0)
+    const absoluteY = containerRect.top + (y * stageScale) + (stagePos?.y || 0)
+    const scaledWidth = width * stageScale
+    const scaledHeight = height * stageScale
+
+    // Create portal element
+    const portalDiv = document.createElement('div')
+    portalDiv.style.position = 'fixed'
+    portalDiv.style.left = `${absoluteX}px`
+    portalDiv.style.top = `${absoluteY}px`
+    portalDiv.style.width = `${scaledWidth}px`
+    portalDiv.style.height = `${scaledHeight}px`
+    portalDiv.style.zIndex = '1000'
+    portalDiv.style.pointerEvents = 'auto'
+
+    portalRoot.appendChild(portalDiv)
+    setPortalElement(portalDiv)
+
+    // Cleanup
+    return () => {
+      if (portalDiv && portalDiv.parentNode) {
+        portalDiv.parentNode.removeChild(portalDiv)
+      }
+    }
+  }, [isEditMode, x, y, width, height])
 
   const handleSave = useCallback(() => {
     const htmlContent = editorRef.current?.getHTML() || ''
@@ -169,62 +222,27 @@ export default function TiptapKonvaText({
         )}
       </Group>
       
-      {/* TipTap editor overlay when editing - rendered outside Konva */}
-      {isEditMode && typeof window !== 'undefined' && (() => {
-        const portalRoot = document.getElementById('tiptap-portal') || (() => {
-          const div = document.createElement('div')
-          div.id = 'tiptap-portal'
-          document.body.appendChild(div)
-          return div
-        })()
-        
-        // Calculate absolute position with proper scaling
-        const stage = groupRef.current?.getStage()
-        const stageContainer = stage?.container()
-        if (!stageContainer || !stage) return null
-        
-        const containerRect = stageContainer.getBoundingClientRect()
-        const stageScale = stage.scaleX() || 1
-        const stagePos = stage.position()
-        
-        const absoluteX = containerRect.left + (x * stageScale) + (stagePos?.x || 0)
-        const absoluteY = containerRect.top + (y * stageScale) + (stagePos?.y || 0)
-        const scaledWidth = width * stageScale
-        const scaledHeight = height * stageScale
-        
-        return ReactDOM.createPortal(
-          <div
-            style={{
-              position: 'fixed',
-              left: absoluteX,
-              top: absoluteY,
-              width: scaledWidth,
-              height: scaledHeight,
-              zIndex: 1000,
-              pointerEvents: 'auto',
-            }}
-          >
-            <TiptapEditor
-              ref={editorRef}
-              content={content}
-              onChange={setContent}
-              onKeyDown={handleKeyDown}
-              onBlur={handleSave}
-              editable={true}
-              autoFocus={true}
-              className="embedded h-full"
-              style={{
-                height: '100%',
-                fontSize: fontSize * stageScale,
-                fontFamily: fontFamily,
-                color: fill,
-              }}
-              placeholder="Type your text..."
-            />
-          </div>,
-          portalRoot
-        )
-      })()}
+      {/* TipTap editor portal - managed by useEffect */}
+      {portalElement && ReactDOM.createPortal(
+        <TiptapEditor
+          ref={editorRef}
+          content={content}
+          onChange={setContent}
+          onKeyDown={handleKeyDown}
+          onBlur={handleSave}
+          editable={true}
+          autoFocus={true}
+          className="embedded h-full"
+          style={{
+            height: '100%',
+            fontSize: fontSize,
+            fontFamily: fontFamily,
+            color: fill,
+          }}
+          placeholder="Type your text..."
+        />,
+        portalElement
+      )}
     </>
   )
 }
