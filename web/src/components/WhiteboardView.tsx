@@ -2597,7 +2597,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   // Render left panel
   function renderLeftPanel() {
     return (
-      <div className="w-64 whimsical-card border-r-0 flex flex-col">
+      <div className="w-64 flex flex-col">
 
         {/* Tools Section */}
         <div className="p-4 border-b border-purple-200 dark:border-purple-700">
@@ -2796,7 +2796,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
   return (
     <div className="h-full flex relative z-10 bg-card">
       {/* Unified Panel Container */}
-      <div className="whimsical-card border-r border-purple-200 dark:border-purple-700 flex">
+      <div className="whimsical-card-left border-r-0 flex">
         {/* Left Panel */}
         {renderLeftPanel()}
       </div>
@@ -2804,7 +2804,7 @@ export default function WhiteboardView({ board }: WhiteboardViewProps) {
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Toolbar */}
-        <div className="whimsical-card border-b border-purple-200 dark:border-purple-700 p-3 flex items-center justify-between">
+        <div className="whimsical-card-top border-l-0 border-b border-purple-200 dark:border-purple-700 p-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="text-sm font-medium text-purple-700 dark:text-purple-300">
               {board.name} - Whiteboard

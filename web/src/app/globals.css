@@ -397,6 +397,31 @@ body {
   transform: translateY(0) scale(1.02);
 }
 
+/* Unified panel styles for seamless borders */
+.whimsical-card-left {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius) 0 0 var(--radius);
+  box-shadow: var(--shadow-whimsical);
+  transition: box-shadow 200ms ease;
+}
+
+.whimsical-card-left:hover {
+  box-shadow: var(--shadow-floating);
+}
+
+.whimsical-card-top {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0 var(--radius) 0 0;
+  box-shadow: var(--shadow-whimsical);
+  transition: box-shadow 200ms ease;
+}
+
+.whimsical-card-top:hover {
+  box-shadow: var(--shadow-floating);
+}
+
 .whimsical-input {
   background: var(--input);
   border: 2px solid var(--border);
