@@ -46,6 +46,7 @@ import MarkdownEditModal from './MarkdownEditModal'
 import ThemeToggle from './ThemeToggle'
 import KonvaText from './KonvaText'
 import TiptapManager from './TiptapManager'
+import TiptapToolbar from './TiptapToolbar'
 import { TextEditorProvider, useTextEditor } from '../hooks/useTextEditor'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useRealtimeSync } from '@/hooks/useRealtimeSync'
@@ -134,8 +135,8 @@ const ImageElement = React.memo(({ element, baseProps }: {
     return (
       <Rect
         {...baseProps}
-        fill="var(--color-gray-100)"
-        stroke="var(--color-gray-300)"
+        fill={getComputedColor("var(--color-gray-100)")}
+        stroke={getComputedColor("var(--color-gray-300)")}
         strokeWidth={1}
         dash={[5, 5]}
       />
@@ -157,10 +158,23 @@ ImageElement.displayName = 'ImageElement'
 function getComputedColor(cssVar: string): string {
   if (typeof window === 'undefined') return '#6366f1' // fallback for SSR
   
+  // If it's already a hex color, return it as-is
+  if (cssVar.startsWith('#') && /^#[0-9A-Fa-f]{6}$/.test(cssVar)) {
+    console.log('🎨 getComputedColor: Already hex color, returning as-is:', cssVar)
+    return cssVar
+  }
+  
+  // If it's not a CSS variable, return it as-is
+  if (!cssVar.includes('var(')) {
+    console.log('🎨 getComputedColor: Not a CSS variable, returning as-is:', cssVar)
+    return cssVar
+  }
+  
   try {
     const computedStyle = getComputedStyle(document.documentElement)
     const varName = cssVar.replace('var(', '').replace(')', '').trim()
     let value = computedStyle.getPropertyValue(varName).trim()
+    console.log('🎨 getComputedColor: Resolving CSS variable:', { cssVar, varName, value })
     
     // If value is empty, try alternative approaches
     if (!value) {
@@ -375,7 +389,7 @@ interface WhiteboardElement extends Element {
 function WhiteboardViewInner({ board, accessLevel = 'admin', updateElementRef }: WhiteboardViewProps & { updateElementRef?: React.MutableRefObject<((elementId: string, updates: Record<string, unknown>) => void) | null> }) {
   const stageRef = useRef<Konva.Stage>(null)
   const supabase = createClient()
-  const { setStageInfo } = useTextEditor()
+  const { setStageInfo, formatText, state, updateColor } = useTextEditor()
   const { 
     elements, 
     setElements, 
@@ -1177,6 +1191,20 @@ function WhiteboardViewInner({ board, accessLevel = 'admin', updateElementRef }:
     }
   }, [navigationContext, elements, setSelectedElementIds, setNavigationContext])
   
+  // Track changes to elements for debugging
+  useEffect(() => {
+    elements.forEach(element => {
+      if (element.type === 'text') {
+        const props = element.properties as ElementProperties || {}
+        console.log('📊 Element state:', { 
+          id: element.id, 
+          fill: props.fill, 
+          text: (props.text as string)?.substring(0, 30) + '...' 
+        })
+      }
+    })
+  }, [elements])
+
   // Close context menu when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -1535,6 +1563,7 @@ function WhiteboardViewInner({ board, accessLevel = 'admin', updateElementRef }:
   }
 
   async function updateElementInDB(id: string, updates: Partial<Element>) {
+    console.log('🔄 updateElementInDB called:', { id, updates })
     try {
       const { error } = await supabase
         .from('elements')
@@ -1542,9 +1571,11 @@ function WhiteboardViewInner({ board, accessLevel = 'admin', updateElementRef }:
         .eq('id', id)
 
       if (error) throw error
+      console.log('✅ Database update successful for element:', id)
+      console.log('🔄 Calling updateElement with:', { id, updates })
       updateElement(id, updates)
     } catch (error) {
-      console.error('Error updating element:', error)
+      console.error('❌ Error updating element:', error)
     }
   }
 
@@ -1567,8 +1598,27 @@ function WhiteboardViewInner({ board, accessLevel = 'admin', updateElementRef }:
     const fillColor = getComputedColor(colorConfig.fill)
     const strokeColor = getComputedColor(colorConfig.stroke)
     
+    console.log('🎨 changeElementColor called:', {
+      elementId,
+      colorKey,
+      fillColor,
+      strokeColor,
+      isEditing: state.isEditing,
+      editingElementId: state.elementId
+    })
+    
     const element = elements.find(el => el.id === elementId)
-    if (!element) return
+    if (!element) {
+      console.log('❌ Element not found:', elementId)
+      return
+    }
+    
+    // If this text element is currently being edited, update the editor context
+    if (element.type === 'text' && state.isEditing && state.elementId === elementId) {
+      console.log('✅ Updating editor context color:', fillColor)
+      // Update the text editor context with the new color
+      updateColor(fillColor)
+    }
     
     const updatedProperties = {
       ...(element.properties as Record<string, unknown>),
@@ -1576,6 +1626,8 @@ function WhiteboardViewInner({ board, accessLevel = 'admin', updateElementRef }:
       stroke: strokeColor,
       colorKey
     }
+    
+    console.log('💾 Saving element properties:', { elementId, updatedProperties })
     
     await updateElementInDB(elementId, { properties: updatedProperties })
   }
@@ -2670,7 +2722,7 @@ function WhiteboardViewInner({ board, accessLevel = 'admin', updateElementRef }:
               {...baseProps}
               text={(props.text as string) || 'Double click to edit'}
               fontSize={(props.fontSize as number) || 14}
-              fill="var(--color-gray-800)"
+              fill={getComputedColor("var(--color-gray-800)")}
               align="center"
               verticalAlign="middle"
               fontFamily="var(--font-sans)"
@@ -2706,7 +2758,12 @@ function WhiteboardViewInner({ board, accessLevel = 'admin', updateElementRef }:
             width={element.width || 200}
             height={element.height || 100}
             fontSize={(props.fontSize as number) || 16}
-            fill={(props.fill as string) || 'var(--color-foreground)'}
+            fill={(() => {
+              const originalFill = (props.fill as string) || 'var(--color-foreground)'
+              const computedFill = getComputedColor(originalFill)
+              console.log('🎨 KonvaText rendering:', { elementId: element.id, originalFill, computedFill })
+              return computedFill
+            })()}
             fontFamily="Arial, sans-serif"
             align="left"
             verticalAlign="top"
@@ -3133,6 +3190,7 @@ function WhiteboardViewInner({ board, accessLevel = 'admin', updateElementRef }:
                 </div>
               )}
             </div>
+            <TiptapToolbar onFormatting={formatText} />
             <ThemeToggle />
           </div>
         </div>
@@ -3500,11 +3558,13 @@ export default function WhiteboardView(props: WhiteboardViewProps) {
   // This ref will hold the updateElement function from the inner component
   const updateElementRef = useRef<((elementId: string, updates: Record<string, unknown>) => void) | null>(null)
 
-  const handleTextSave = useCallback((elementId: string, content: string) => {
+  const handleTextSave = useCallback((elementId: string, content: string, color: string) => {
+    console.log('📝 handleTextSave called:', { elementId, content: content?.substring(0, 50), color })
     if (updateElementRef.current) {
       updateElementRef.current(elementId, {
         properties: {
-          text: content
+          text: content,
+          fill: color
         }
       })
     }

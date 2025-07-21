@@ -5,16 +5,16 @@ import { useTextEditor } from '../hooks/useTextEditor'
 import TiptapEditor, { TiptapEditorRef } from './TiptapEditor'
 
 interface TiptapManagerProps {
-  onSave: (elementId: string, content: string) => void
+  onSave: (elementId: string, content: string, color: string) => void
 }
 
 export default function TiptapManager({ onSave }: TiptapManagerProps) {
-  const { state, stageInfo, updateContent, saveContent, stopEditing } = useTextEditor()
+  const { state, stageInfo, updateContent, saveContent, stopEditing, setFormatHandler } = useTextEditor()
   const editorRef = useRef<TiptapEditorRef>(null)
 
   const handleSave = useCallback(() => {
-    saveContent()
-  }, [saveContent])
+    saveContent(onSave)
+  }, [saveContent, onSave])
 
   const handleCancel = useCallback(() => {
     stopEditing()
@@ -29,6 +29,48 @@ export default function TiptapManager({ onSave }: TiptapManagerProps) {
       handleCancel()
     }
   }, [handleSave, handleCancel])
+
+  // Set up format handler when editor ref is available
+  useEffect(() => {
+    if (editorRef.current) {
+      const formatHandler = (format: string, value?: string) => {
+        switch (format) {
+          case 'bold':
+            editorRef.current?.toggleBold()
+            break
+          case 'italic':
+            editorRef.current?.toggleItalic()
+            break
+          case 'underline':
+            editorRef.current?.toggleUnderline()
+            break
+          case 'strike':
+            editorRef.current?.toggleStrike()
+            break
+          case 'bulletList':
+            editorRef.current?.toggleBulletList()
+            break
+          case 'orderedList':
+            editorRef.current?.toggleOrderedList()
+            break
+          case 'blockquote':
+            editorRef.current?.toggleBlockquote()
+            break
+          case 'codeBlock':
+            editorRef.current?.toggleCodeBlock()
+            break
+          case 'heading':
+            if (value) {
+              editorRef.current?.setHeading(parseInt(value))
+            }
+            break
+        }
+      }
+      setFormatHandler(formatHandler)
+    } else {
+      setFormatHandler(null)
+    }
+  }, [setFormatHandler, state.isEditing])
 
   // Focus editor when editing starts
   useEffect(() => {

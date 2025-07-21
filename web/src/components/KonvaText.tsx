@@ -53,6 +53,7 @@ export default function KonvaText({
 
   const handleDoubleClick = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
     // Start editing this text element
+    console.log('✏️ Starting text edit:', { id, fill, fontSize, fontFamily })
     startEditing(id, text, { x, y, width, height }, { fontSize, fontFamily, color: fill })
     onDblClick?.(e)
   }, [id, text, x, y, width, height, fontSize, fontFamily, fill, startEditing, onDblClick])

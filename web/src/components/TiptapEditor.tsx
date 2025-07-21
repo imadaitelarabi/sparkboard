@@ -4,6 +4,7 @@ import React, { useEffect, useImperativeHandle, forwardRef } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
+import Underline from '@tiptap/extension-underline'
 
 interface TiptapEditorProps {
   content: string
@@ -25,6 +26,15 @@ export interface TiptapEditorRef {
   getText: () => string
   getMarkdown: () => string
   setContent: (content: string) => void
+  toggleBold: () => void
+  toggleItalic: () => void
+  toggleUnderline: () => void
+  toggleStrike: () => void
+  toggleBulletList: () => void
+  toggleOrderedList: () => void
+  toggleBlockquote: () => void
+  toggleCodeBlock: () => void
+  setHeading: (level: number) => void
 }
 
 const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(({
@@ -46,6 +56,7 @@ const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(({
           keepMarks: false,
         },
       }),
+      Underline,
       Placeholder.configure({
         placeholder,
       }),
@@ -191,6 +202,33 @@ const TiptapEditor = forwardRef<TiptapEditorRef, TiptapEditorProps>(({
     },
     setContent: (newContent: string) => {
       editor?.commands.setContent(newContent)
+    },
+    toggleBold: () => {
+      editor?.chain().focus().toggleBold().run()
+    },
+    toggleItalic: () => {
+      editor?.chain().focus().toggleItalic().run()
+    },
+    toggleUnderline: () => {
+      editor?.chain().focus().toggleUnderline().run()
+    },
+    toggleStrike: () => {
+      editor?.chain().focus().toggleStrike().run()
+    },
+    toggleBulletList: () => {
+      editor?.chain().focus().toggleBulletList().run()
+    },
+    toggleOrderedList: () => {
+      editor?.chain().focus().toggleOrderedList().run()
+    },
+    toggleBlockquote: () => {
+      editor?.chain().focus().toggleBlockquote().run()
+    },
+    toggleCodeBlock: () => {
+      editor?.chain().focus().toggleCodeBlock().run()
+    },
+    setHeading: (level: number) => {
+      editor?.chain().focus().toggleHeading({ level: level as 1 | 2 | 3 | 4 | 5 | 6 }).run()
     },
   }), [editor])
 
