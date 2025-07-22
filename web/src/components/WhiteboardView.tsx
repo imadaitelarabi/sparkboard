@@ -2204,7 +2204,7 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
     })
   }
 
-  function handleElementDragEnd(elementId: string, newAttrs: { x: number; y: number }) {
+  function handleElementDragEnd(_elementId: string, _newAttrs: { x: number; y: number }) {
     // Update database for all dragged elements with their final positions
     draggedElements.forEach(id => {
       const element = elements.find(el => el.id === id)

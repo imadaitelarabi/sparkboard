@@ -6,6 +6,7 @@ import { Plus, Search, Calendar, User, FolderOpen, LayoutGrid, Columns3, Externa
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
 import { Database } from '@/types/database.types'
+import { saveDashboardFilters, loadDashboardFilters, defaultDashboardFilters } from '@/utils/dashboardFilters'
 import AuthForm from './AuthForm'
 import InputModal from './InputModal'
 import KanbanView from './KanbanView'
@@ -28,13 +29,16 @@ export default function Dashboard() {
   const { projects, setProjects, user, setUser } = useAppStore()
   const [tasks, setTasks] = useState<TaskWithDetails[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [filterProject, setFilterProject] = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false)
-  const [viewMode, setViewMode] = useState<'kanban' | 'grid'>('kanban')
-  const [groupBy, setGroupBy] = useState<'project' | 'priority' | 'status'>('status')
   const [showNoLinkedElementsModal, setShowNoLinkedElementsModal] = useState(false)
+
+  // Load initial filter values from localStorage or use defaults
+  const initialFilters = typeof window !== 'undefined' ? loadDashboardFilters() : null
+  const [searchTerm, setSearchTerm] = useState(initialFilters?.searchTerm ?? defaultDashboardFilters.searchTerm)
+  const [filterProject, setFilterProject] = useState(initialFilters?.filterProject ?? defaultDashboardFilters.filterProject)
+  const [filterStatus, setFilterStatus] = useState(initialFilters?.filterStatus ?? defaultDashboardFilters.filterStatus)
+  const [viewMode, setViewMode] = useState<'kanban' | 'grid'>(initialFilters?.viewMode ?? defaultDashboardFilters.viewMode)
+  const [groupBy, setGroupBy] = useState<'project' | 'priority' | 'status'>(initialFilters?.groupBy ?? defaultDashboardFilters.groupBy)
 
   const loadData = useCallback(async () => {
     try {
@@ -126,6 +130,19 @@ export default function Dashboard() {
 
     return () => subscription.unsubscribe()
   }, [loadData, supabase.auth, setUser, setProjects, setTasks, searchParams, router])
+
+  // Save filters to localStorage whenever they change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      saveDashboardFilters({
+        searchTerm,
+        filterProject,
+        filterStatus,
+        viewMode,
+        groupBy
+      })
+    }
+  }, [searchTerm, filterProject, filterStatus, viewMode, groupBy])
 
   async function createProject(projectName: string) {
     if (!user || !projectName.trim()) return
