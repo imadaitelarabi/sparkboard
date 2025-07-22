@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { imageUploadService } from '@/lib/image-upload'
+import { saveLastUsedColor, getLastUsedColors, getLastUsedColorForElementType, getRecentCustomColors } from '@/utils/elementColors'
 import { useAppStore } from '@/store'
 import { Database } from '@/types/database.types'
 import { 
@@ -412,8 +413,18 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
   const [editingMarkdownElement, setEditingMarkdownElement] = useState<{ id: string; text: string } | null>(null)
   const [inlineEditingElement, setInlineEditingElement] = useState<string | null>(null)
   const [insertFormattingFn, setInsertFormattingFn] = useState<((before: string, after?: string) => void) | null>(null)
-  const [selectedColor, setSelectedColor] = useState<ElementColorKey>('primary')
-  const [customColor, setCustomColor] = useState('#6366f1')
+  // Initialize with last saved colors
+  const initialColors = typeof window !== 'undefined' ? getLastUsedColors() : null
+  const [selectedColor, setSelectedColor] = useState<ElementColorKey>(
+    (initialColors?.lastSelected && !initialColors.lastSelected.startsWith('#')) 
+      ? initialColors.lastSelected as ElementColorKey 
+      : 'primary'
+  )
+  const [customColor, setCustomColor] = useState(
+    (initialColors?.lastSelected?.startsWith('#')) 
+      ? initialColors.lastSelected 
+      : '#6366f1'
+  )
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; elementId: string } | null>(null)
   const [copiedElements, setCopiedElements] = useState<WhiteboardElement[]>([])
   const [resizeState, setResizeState] = useState<{
@@ -451,7 +462,9 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
   const handleToolChange = (toolType: ToolType) => {
     setActiveTool(toolType)
     if (toolType !== 'select' && DEFAULT_ELEMENT_COLORS[toolType]) {
-      setSelectedColor(DEFAULT_ELEMENT_COLORS[toolType])
+      // Use saved color for this element type if available, otherwise use default
+      const savedColor = getLastUsedColorForElementType(toolType)
+      setSelectedColor(savedColor as ElementColorKey)
     }
     
     // Handle image tool - open file picker immediately
@@ -1509,6 +1522,9 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
 
       if (error) throw error
       addElement(data)
+      
+      // Save color as last used for this element type
+      saveLastUsedColor(type, selectedColor)
     } catch (error) {
       console.error('Error creating element:', error)
     }
@@ -1558,6 +1574,9 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
     }
     
     await updateElementInDB(elementId, { properties: updatedProperties })
+    
+    // Save color as last used for this element type
+    saveLastUsedColor(element.type, colorKey)
   }
   
   async function changeElementToCustomColor(elementId: string, fillColor: string) {
@@ -1575,6 +1594,9 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
     }
     
     await updateElementInDB(elementId, { properties: updatedProperties })
+    
+    // Save custom color as last used for this element type
+    saveLastUsedColor(element.type, fillColor)
   }
 
   // Update element style properties
@@ -2960,6 +2982,32 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
             <div className="text-xs text-muted-foreground">
               Pick or type hex color
             </div>
+
+            {/* Recent Custom Colors */}
+            {getRecentCustomColors().length > 0 && (
+              <>
+                <div className="text-xs text-muted-foreground mt-2 mb-1">Recent</div>
+                <div className="flex flex-wrap gap-1">
+                  {getRecentCustomColors().map((color, index) => (
+                    <button
+                      key={index}
+                      onClick={() => {
+                        setCustomColor(color)
+                        setSelectedColor('primary') // Reset theme selection when using custom
+                        if (selectedElementIds.length > 0) {
+                          selectedElementIds.forEach(id => changeElementToCustomColor(id, color))
+                        }
+                      }}
+                      className={`w-6 h-6 rounded border border-gray-200 dark:border-gray-600 transition-transform duration-200 hover:scale-110 ${
+                        customColor === color ? 'ring-2 ring-purple-400 dark:ring-purple-500' : ''
+                      }`}
+                      style={{ backgroundColor: color }}
+                      title={`Recent color: ${color}`}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
 
