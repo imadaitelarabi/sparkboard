@@ -1,170 +1,133 @@
-📝 Product Requirements Document (PRD)
+# SparkBoard
+
+A collaborative whiteboard tool designed for project management with real-time collaboration features. Visually brainstorm, collaborate in real-time, and easily convert visual elements into tasks linked to your projects.
+
+![SparkBoard](web/public/logo.png)
+
+## ✨ Features
+
+- **Infinite Canvas**: Pan and zoom on an unlimited whiteboard space
+- **Real-time Collaboration**: Multiple users with live cursors and instant updates
+- **Element Creation**: Sticky notes, shapes, text, connectors, and freehand drawing
+- **Task Management**: Convert whiteboard elements directly into Kanban tasks
+- **Project Organization**: Multiple projects with dedicated whiteboards and task boards
+- **Live Sharing**: Share boards with team members and external collaborators
 
-Product Name: SparkBoard
-Owner: Imad
-Date: July 19, 2025
-1️⃣ Objective
+## 🚀 Quick Start
 
-Build a collaborative whiteboard tool designed for project management with a minimal, intuitive interface.
-Users can visually brainstorm, collaborate in real-time, and easily convert visual elements into tasks linked to their projects.
-2️⃣ Core Features
-✅ 1. Project & Board Management
+### Try the Live Demo
 
-    A user can create multiple Projects.
+Visit [SparkBoard Cloud](https://board.hellospark.tech) to try the application without any setup.
 
-    Each Project contains:
+### Local Development Setup
 
-        Multiple Whiteboards (nameable, sharable).
+#### Prerequisites
 
-        One Tasks Board (Kanban style).
+- **Node.js** (v18 or higher)
+- **npm** or **yarn**
+- **Docker** (for local Supabase)
+- **Supabase CLI** (`npm install -g supabase`)
 
-    Boards are switchable via a sidebar or tab menu.
+#### Step-by-step Setup
 
-✅ 2. Whiteboard Core Features
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/imadaitelarabi/sparkboard.git
+   cd sparkboard
+   ```
 
-    Infinite canvas with pan/zoom.
+2. **Start Supabase locally**
+   ```bash
+   cd supabase
+   make db-local
+   ```
+   This will start Supabase at `http://127.0.0.1:54321` with Studio at `http://127.0.0.1:54323`.
 
-    Basic elements:
+3. **Apply database migrations**
+   ```bash
+   make migrate-local
+   ```
 
-        Sticky Notes
+4. **Generate TypeScript types**
+   ```bash
+   make gen-types
+   ```
 
-        Shapes (Rectangle, Circle, Arrow)
+5. **Install frontend dependencies**
+   ```bash
+   cd ../web
+   npm install
+   ```
 
-        Text
+6. **Start the development server**
+   ```bash
+   npm run dev
+   ```
 
-        Connectors
+7. **Open your browser**
+   Visit `http://localhost:3000` to see SparkBoard running locally.
 
-        Freehand draw
+#### Available Commands
 
-    Select single/multiple elements via drag-select or shift+click.
+**Frontend** (from `/web` directory):
+- `npm run dev` - Start development server with Turbopack
+- `npm run build` - Build for production
+- `npm run start` - Start production server
+- `npm run lint` - Lint code
 
-    Group/Ungroup elements.
+**Database** (from `/supabase` directory):
+- `make db-local` - Start local Supabase
+- `make migrate-local` - Apply migrations locally
+- `make new-migration NAME=migration_name` - Create new migration
+- `make gen-types` - Generate TypeScript types
+- `make db-status` - Check migration status
 
-    Collaborative real-time editing (multi-user cursor).
+## 🏗️ Architecture
 
-    Elements can be:
+- **Frontend**: Next.js 15 with React 19, TypeScript, and Tailwind CSS
+- **Backend**: Supabase (PostgreSQL, Authentication, Real-time)
+- **Canvas**: Konva.js for high-performance 2D canvas rendering
+- **State Management**: Zustand for client state
+- **Deployment**: Vercel for frontend, Supabase Cloud for backend
 
-        Edited
+## 🗺️ Roadmap
 
-        Moved
+### MVP (Current)
+- [x] Create task from an element
+- [x] View task just take you to your element in the whiteboard  
+- [x] Projects
+- [x] Cmd + k Universal search
+- [x] Emojies element
+- [x] Focus mode
+- [x] Lock Elements
+- [x] Edit single elements inside a group of elements
 
-        Deleted
+### Post MVP (Next)
+- [ ] Documents/Doc reference as an element in a whiteboard
+- [ ] Actions (v1.0) supports claude code action
 
-        Selected & turned into a Task.
+### Future
+- [ ] Would love to hear your ideas
 
-✅ 3. Create Tasks from Elements
+Want to contribute to any of these features? Check out our [Contributing Guide](CONTRIBUTING.md)!
 
-    After selecting one or multiple elements:
+## 🤝 Contributing
 
-        “Create Task” action triggers a modal with:
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
 
-            Task Title (pre-filled from selected text if any)
+- Code of conduct
+- Development workflow
+- Pull request process
+- Issue reporting
 
-            Description (optional)
+## 📄 License
 
-            Category (from Kanban Board)
+This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
 
-            Assignee
+## 🛠️ Tech Stack
 
-            Due Date
-
-        Once created:
-
-            Task appears on the Tasks Board.
-
-            Related elements on whiteboard get a small Task Badge/Icon.
-
-            Clicking on the task in the Tasks Board highlights/zooms to elements in the whiteboard.
-
-✅ 4. Tasks Board (Per Project)
-
-    Tasks Board is a Whiteboard with flexible Kanban categories.
-
-    Categories can be:
-
-        Created
-
-        Renamed
-
-        Deleted
-
-        Reordered
-
-    Tasks are movable between categories.
-
-    Each Task Card:
-
-        Title
-
-        Assignee
-
-        Due Date
-
-        Linked Whiteboard Elements (Click to zoom)
-
-    Optional task details on click (popup or side panel).
-
-✅ 5. Dashboard
-
-    Global view of:
-
-        All Projects
-
-        Task Previews (Kanban/List)
-
-        Filter by:
-
-            Project
-
-            Status
-
-            Assignee
-
-            Due Date
-
-    Clicking a Task on Dashboard:
-
-        Opens related Project and highlights the related elements on its Whiteboard.
-
-3️⃣ Collaboration Features
-
-    Live cursors & element locking.
-
-    Real-time task updates.
-
-    User avatars with online status.
-
-    Comments on tasks (optional, v2).
-
-4️⃣ MVP Scope Summary
-Feature	Status
-Project & Board Management	✅
-Whiteboard Basic Elements	✅
-Selection & Task Creation	✅
-Task Kanban Board	✅
-Dashboard with Filters	✅
-Real-time Collaboration	✅
-5️⃣ User Flows
-
-[Flow 1] Create Project & Whiteboards
-User → Create Project → Add Whiteboard(s) → Start drawing/brainstorming.
-
-[Flow 2] Select Elements → Create Task
-User selects elements → Clicks "Create Task" → Task is created & linked.
-
-[Flow 3] View Tasks on Task Board
-User opens Task Board → See tasks grouped by category → Moves/updates them.
-
-[Flow 4] Use Dashboard
-User opens Dashboard → Filters tasks → Clicks a task → Navigated to Project Whiteboard.
-
-
-7️⃣ Tech Stack Suggestion
-
-    Frontend: NextJS + Konva.js / Fabric.js (Whiteboard), Zustand, Tailwind
-
-    Backend: Supabase (Auth, DB, Realtime)
-
-    Collab Layer: Liveblocks or Yjs
-
-    Deployment: Vercel
+- **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
+- **Canvas**: Konva.js for whiteboard rendering
+- **Backend**: Supabase (PostgreSQL, Auth, Real-time)
+- **State Management**: Zustand
+- **Deployment**: Vercel + Supabase Cloud
