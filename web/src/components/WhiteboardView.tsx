@@ -46,7 +46,7 @@ import MarkdownEditModal from './MarkdownEditModal'
 import ThemeToggle from './ThemeToggle'
 import MarkdownText from './MarkdownText'
 import MarkdownToolbar from './MarkdownToolbar'
-import InlineMarkdownEditor from './InlineMarkdownEditor'
+import SimplifiedRichTextEditor from './SimplifiedRichTextEditor'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useRealtimeSync } from '@/hooks/useRealtimeSync'
 import { usePresence } from '@/hooks/usePresence'
@@ -1599,6 +1599,49 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
       (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
       (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1)
   }
+
+  // Helper function to calculate text dimensions for RENDERED content (read mode)
+  function calculateTextDimensions(text: string, fontSize: number = 16): { width: number; height: number } {
+    const lines = text.split('\n')
+    const padding = 24 // 12px padding on each side
+    const lineHeight = fontSize * 1.4
+    
+    let maxWidth = 0
+    let totalHeight = 0
+    
+    lines.forEach(line => {
+      let lineLength = line.length
+      let lineFontSize = fontSize
+      let currentLineHeight = lineHeight
+      
+      // Handle markdown headers for sizing (but keep full line length for textarea display)
+      const headerMatch = line.match(/^(#{1,6})\s+(.+)$/)
+      if (headerMatch) {
+        const level = headerMatch[1].length
+        const headerMultiplier = Math.max(1.2, 2.2 - (level - 1) * 0.2)
+        lineFontSize = fontSize * headerMultiplier
+        currentLineHeight = lineHeight * headerMultiplier
+        // Keep full line length including markdown symbols for textarea display
+        lineLength = line.length
+      }
+      
+      // Handle bold/italic formatting (approximate extra width)
+      if (line.includes('**') || line.includes('*')) {
+        lineFontSize *= 1.1 // Slightly wider for bold/italic
+      }
+      
+      // Estimate character width based on actual font size that will be rendered
+      const avgCharWidth = lineFontSize * 0.6
+      const lineWidth = lineLength * avgCharWidth
+      maxWidth = Math.max(maxWidth, lineWidth)
+      totalHeight += currentLineHeight
+    })
+    
+    const height = Math.max(50, totalHeight + padding)
+    const width = Math.max(150, Math.min(maxWidth + padding, 800))
+    
+    return { width, height }
+  }
   
   
   // Layer management functions
@@ -2693,6 +2736,10 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
             onDblClick={() => {
               if (!isReadOnly) {
                 setInlineEditingElement(element.id)
+                // Auto-zoom to text element when entering edit mode
+                setTimeout(() => {
+                  centerViewOnElements([element.id])
+                }, 100)
               }
             }}
             draggable={activeTool === 'select' && inlineEditingElement !== element.id}
@@ -2706,7 +2753,18 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
             }}
             isEditing={inlineEditingElement === element.id}
             onTextSave={(newText: string) => {
+              // Calculate new dimensions based on text content
+              const currentElement = elements.find(el => el.id === element.id)
+              const props = currentElement?.properties as ElementProperties
+              const fontSize = props?.fontSize as number || 16
+              const newDimensions = calculateTextDimensions(newText, fontSize)
+              
+              // Update both text content and dimensions
               updateElementProperties(element.id, { text: newText })
+              updateElement(element.id, { 
+                width: newDimensions.width, 
+                height: newDimensions.height 
+              })
               setInlineEditingElement(null)
             }}
             onEditingCancel={() => {
@@ -3509,7 +3567,7 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
         const scaledHeight = (element.height || 100) * stageScale
         
         return (
-          <InlineMarkdownEditor
+          <SimplifiedRichTextEditor
             x={absoluteX}
             y={absoluteY}
             width={scaledWidth}
@@ -3520,7 +3578,18 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
             initialValue={props.text as string || ''}
             isEditing={true}
             onSave={(newText: string) => {
+              // Calculate new dimensions based on text content
+              const currentElement = elements.find(el => el.id === element.id)
+              const props = currentElement?.properties as ElementProperties
+              const fontSize = props?.fontSize as number || 16
+              const newDimensions = calculateTextDimensions(newText, fontSize)
+              
+              // Update both text content and dimensions
               updateElementProperties(element.id, { text: newText })
+              updateElement(element.id, { 
+                width: newDimensions.width, 
+                height: newDimensions.height 
+              })
               setInlineEditingElement(null)
               setInsertFormattingFn(null)
             }}
@@ -3530,6 +3599,15 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
             }}
             onReady={(insertFn) => {
               setInsertFormattingFn(() => insertFn)
+            }}
+            onResize={(newWidth, newHeight) => {
+              // Update element dimensions in real-time while editing
+              const scaledWidth = newWidth / stageScale
+              const scaledHeight = newHeight / stageScale
+              updateElement(element.id, { 
+                width: scaledWidth, 
+                height: scaledHeight 
+              })
             }}
           />
         )

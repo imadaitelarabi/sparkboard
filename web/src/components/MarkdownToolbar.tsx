@@ -4,11 +4,12 @@ import React from 'react'
 import { Bold, Italic, Heading1, Heading2, List, Code } from 'lucide-react'
 
 interface MarkdownToolbarProps {
-  onInsertFormatting: (before: string, after?: string) => void
+  onInsertFormatting?: (before: string, after?: string) => void
+  onExecuteCommand?: (command: string, value?: string) => void
   isVisible: boolean
 }
 
-export default function MarkdownToolbar({ onInsertFormatting, isVisible }: MarkdownToolbarProps) {
+export default function MarkdownToolbar({ onInsertFormatting, onExecuteCommand, isVisible }: MarkdownToolbarProps) {
   if (!isVisible) {
     return null
   }
@@ -17,44 +18,80 @@ export default function MarkdownToolbar({ onInsertFormatting, isVisible }: Markd
     {
       icon: Bold,
       label: 'Bold',
-      onClick: () => onInsertFormatting('**', '**'),
+      onClick: () => {
+        if (onExecuteCommand) {
+          onExecuteCommand('bold')
+        } else if (onInsertFormatting) {
+          onInsertFormatting('**', '**')
+        }
+      },
       title: 'Bold (Ctrl/Cmd + B)'
     },
     {
       icon: Italic,
       label: 'Italic', 
-      onClick: () => onInsertFormatting('*', '*'),
+      onClick: () => {
+        if (onExecuteCommand) {
+          onExecuteCommand('italic')
+        } else if (onInsertFormatting) {
+          onInsertFormatting('*', '*')
+        }
+      },
       title: 'Italic (Ctrl/Cmd + I)'
     },
     {
       icon: Heading1,
       label: 'H1',
-      onClick: () => onInsertFormatting('# '),
+      onClick: () => {
+        if (onExecuteCommand) {
+          onExecuteCommand('formatBlock', 'h1')
+        } else if (onInsertFormatting) {
+          onInsertFormatting('# ')
+        }
+      },
       title: 'Header 1'
     },
     {
       icon: Heading2,
       label: 'H2',
-      onClick: () => onInsertFormatting('## '),
+      onClick: () => {
+        if (onExecuteCommand) {
+          onExecuteCommand('formatBlock', 'h2')
+        } else if (onInsertFormatting) {
+          onInsertFormatting('## ')
+        }
+      },
       title: 'Header 2'
     },
     {
       icon: List,
       label: 'List',
-      onClick: () => onInsertFormatting('- '),
+      onClick: () => {
+        if (onExecuteCommand) {
+          onExecuteCommand('insertUnorderedList')
+        } else if (onInsertFormatting) {
+          onInsertFormatting('- ')
+        }
+      },
       title: 'Bullet List'
     },
     {
       icon: Code,
       label: 'Code',
-      onClick: () => onInsertFormatting('`', '`'),
+      onClick: () => {
+        if (onExecuteCommand) {
+          onExecuteCommand('formatBlock', 'pre')
+        } else if (onInsertFormatting) {
+          onInsertFormatting('`', '`')
+        }
+      },
       title: 'Inline Code'
     }
   ]
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs text-purple-700 dark:text-purple-300 font-medium">Markdown</span>
+      <span className="text-xs text-purple-700 dark:text-purple-300 font-medium">Formatting</span>
       <div className="flex gap-1">
         {toolbarButtons.map(({ icon: Icon, label, onClick, title }) => (
           <button
