@@ -79,8 +79,8 @@ export default function KanbanView({
   const headerPadding = compact ? 'p-2' : 'p-3'
 
   return (
-    <div className="h-full bg-background overflow-auto">
-      <div className="flex gap-5 h-full p-5">
+    <div className="h-full bg-background overflow-x-auto overflow-y-hidden">
+      <div className="flex gap-5 h-full p-5 min-w-fit">
         {columns.map((column) => (
           <div
             key={column.id}
