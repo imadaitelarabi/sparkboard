@@ -1599,6 +1599,42 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
       (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
       (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1)
   }
+
+  // Helper function to calculate text dimensions based on content
+  function calculateTextDimensions(text: string, fontSize: number = 16): { width: number; height: number } {
+    const lines = text.split('\n')
+    const padding = 16 // 8px padding on each side
+    const lineHeight = fontSize * 1.4
+    
+    // Calculate width based on longest line
+    let maxWidth = 0
+    lines.forEach(line => {
+      // Handle markdown headers
+      let lineLength = line.length
+      let lineFontSize = fontSize
+      
+      const headerMatch = line.match(/^(#{1,6})\s+(.+)$/)
+      if (headerMatch) {
+        const level = headerMatch[1].length
+        const headerSizeMultiplier = Math.max(1.2, 2.2 - (level - 1) * 0.2)
+        lineFontSize = fontSize * headerSizeMultiplier
+        lineLength = headerMatch[2].length
+      }
+      
+      // Estimate character width (more accurate than simple multiplication)
+      const avgCharWidth = lineFontSize * 0.55
+      const lineWidth = lineLength * avgCharWidth
+      maxWidth = Math.max(maxWidth, lineWidth)
+    })
+    
+    // Calculate height
+    const height = Math.max(50, lines.length * lineHeight + padding)
+    
+    // Set minimum and maximum constraints
+    const width = Math.max(120, Math.min(maxWidth + padding, 600))
+    
+    return { width, height }
+  }
   
   
   // Layer management functions
@@ -2693,6 +2729,10 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
             onDblClick={() => {
               if (!isReadOnly) {
                 setInlineEditingElement(element.id)
+                // Auto-zoom to text element when entering edit mode
+                setTimeout(() => {
+                  centerViewOnElements([element.id])
+                }, 100)
               }
             }}
             draggable={activeTool === 'select' && inlineEditingElement !== element.id}
@@ -2706,7 +2746,18 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
             }}
             isEditing={inlineEditingElement === element.id}
             onTextSave={(newText: string) => {
+              // Calculate new dimensions based on text content
+              const currentElement = elements.find(el => el.id === element.id)
+              const props = currentElement?.properties as ElementProperties
+              const fontSize = props?.fontSize as number || 16
+              const newDimensions = calculateTextDimensions(newText, fontSize)
+              
+              // Update both text content and dimensions
               updateElementProperties(element.id, { text: newText })
+              updateElement(element.id, { 
+                width: newDimensions.width, 
+                height: newDimensions.height 
+              })
               setInlineEditingElement(null)
             }}
             onEditingCancel={() => {
@@ -3520,7 +3571,18 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
             initialValue={props.text as string || ''}
             isEditing={true}
             onSave={(newText: string) => {
+              // Calculate new dimensions based on text content
+              const currentElement = elements.find(el => el.id === element.id)
+              const props = currentElement?.properties as ElementProperties
+              const fontSize = props?.fontSize as number || 16
+              const newDimensions = calculateTextDimensions(newText, fontSize)
+              
+              // Update both text content and dimensions
               updateElementProperties(element.id, { text: newText })
+              updateElement(element.id, { 
+                width: newDimensions.width, 
+                height: newDimensions.height 
+              })
               setInlineEditingElement(null)
               setInsertFormattingFn(null)
             }}
@@ -3530,6 +3592,15 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
             }}
             onReady={(insertFn) => {
               setInsertFormattingFn(() => insertFn)
+            }}
+            onResize={(newWidth, newHeight) => {
+              // Update element dimensions in real-time while editing
+              const scaledWidth = newWidth / stageScale
+              const scaledHeight = newHeight / stageScale
+              updateElement(element.id, { 
+                width: scaledWidth, 
+                height: scaledHeight 
+              })
             }}
           />
         )

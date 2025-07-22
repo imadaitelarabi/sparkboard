@@ -16,6 +16,43 @@ interface HybridRichTextEditorProps {
   onCancel: () => void
   onKeyDown?: (e: React.KeyboardEvent) => void
   onReady?: (insertFormatting: (before: string, after?: string) => void) => void
+  onResize?: (newWidth: number, newHeight: number) => void
+}
+
+// Helper function to calculate text dimensions based on content
+function calculateTextDimensions(text: string, fontSize: number = 16): { width: number; height: number } {
+  const lines = text.split('\n')
+  const padding = 16 // 8px padding on each side
+  const lineHeight = fontSize * 1.4
+  
+  // Calculate width based on longest line
+  let maxWidth = 0
+  lines.forEach(line => {
+    // Handle markdown headers
+    let lineLength = line.length
+    let lineFontSize = fontSize
+    
+    const headerMatch = line.match(/^(#{1,6})\s+(.+)$/)
+    if (headerMatch) {
+      const level = headerMatch[1].length
+      const headerSizeMultiplier = Math.max(1.2, 2.2 - (level - 1) * 0.2)
+      lineFontSize = fontSize * headerSizeMultiplier
+      lineLength = headerMatch[2].length
+    }
+    
+    // Estimate character width (more accurate than simple multiplication)
+    const avgCharWidth = lineFontSize * 0.55
+    const lineWidth = lineLength * avgCharWidth
+    maxWidth = Math.max(maxWidth, lineWidth)
+  })
+  
+  // Calculate height
+  const height = Math.max(50, lines.length * lineHeight + padding)
+  
+  // Set minimum and maximum constraints
+  const width = Math.max(120, Math.min(maxWidth + padding, 600))
+  
+  return { width, height }
 }
 
 // Convert markdown to HTML for rich display
@@ -49,18 +86,31 @@ export default function HybridRichTextEditor({
   onSave,
   onCancel,
   onKeyDown,
-  onReady
+  onReady,
+  onResize
 }: HybridRichTextEditorProps) {
   const [markdownValue, setMarkdownValue] = useState(initialValue)
   const [htmlPreview, setHtmlPreview] = useState('')
+  const [currentWidth, setCurrentWidth] = useState(width)
+  const [currentHeight, setCurrentHeight] = useState(height)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const isFormattingRef = useRef(false)
 
-  // Update HTML preview when markdown changes
+  // Update HTML preview and dynamic size when markdown changes
   useEffect(() => {
     setHtmlPreview(markdownToHtml(markdownValue))
-  }, [markdownValue])
+    
+    // Calculate new dimensions based on content
+    if (onResize && markdownValue.trim()) {
+      const newDimensions = calculateTextDimensions(markdownValue, fontSize)
+      if (newDimensions.width !== currentWidth || newDimensions.height !== currentHeight) {
+        setCurrentWidth(newDimensions.width)
+        setCurrentHeight(newDimensions.height)
+        onResize(newDimensions.width, newDimensions.height)
+      }
+    }
+  }, [markdownValue, fontSize, onResize, currentWidth, currentHeight])
 
   useEffect(() => {
     if (isEditing) {
@@ -169,8 +219,8 @@ export default function HybridRichTextEditor({
       style={{
         left: x,
         top: y,
-        width: width,
-        height: height,
+        width: currentWidth,
+        height: currentHeight,
       }}
     >
       {/* Rich text preview background */}
