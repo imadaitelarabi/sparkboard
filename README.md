@@ -1,6 +1,6 @@
 # SparkBoard
 
-A collaborative whiteboard tool designed for project management with real-time collaboration features. Visually brainstorm, collaborate in real-time, and easily convert visual elements into tasks linked to your projects.
+The first developer-friendly whiteboard built for daily projects. SparkBoard combines visual brainstorming with powerful project management, letting you seamlessly convert ideas into actionable tasks with real-time collaboration.
 
 ![SparkBoard](web/public/logo.png)
 
@@ -67,6 +67,28 @@ Visit [SparkBoard Cloud](https://board.hellospark.tech) to try the application w
 7. **Open your browser**
    Visit `http://localhost:3000` to see SparkBoard running locally.
 
+#### Environment Variables
+
+Create a `.env.local` file in the `/web` directory with the following variables:
+
+```bash
+# Essential for local development
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Optional but recommended for full functionality
+RESEND_API_KEY=your-resend-api-key-here
+RESEND_FROM_EMAIL="SparkBoard <noreply@yourdomain.com>"
+NEXT_PUBLIC_ENABLE_OAUTH=false
+```
+
+**For Production:**
+- Get your Supabase URL and keys from [Supabase Dashboard](https://supabase.com/dashboard) → Settings → API
+- Sign up for [Resend](https://resend.com) for email functionality
+- Configure OAuth providers if needed (Google, GitHub)
+
 #### Available Commands
 
 **Frontend** (from `/web` directory):
@@ -96,11 +118,11 @@ Visit [SparkBoard Cloud](https://board.hellospark.tech) to try the application w
 - [x] Create task from an element
 - [x] View task just take you to your element in the whiteboard  
 - [x] Projects
-- [x] Cmd + k Universal search
-- [x] Emojies element
-- [x] Focus mode
-- [x] Lock Elements
-- [x] Edit single elements inside a group of elements
+- [] Cmd + k Universal search
+- [] Emojies element
+- [] Focus mode
+- [] Lock Elements
+- [] Edit single elements inside a group of elements
 
 ### Post MVP (Next)
 - [ ] Documents/Doc reference as an element in a whiteboard
