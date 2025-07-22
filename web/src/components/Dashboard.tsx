@@ -99,8 +99,8 @@ export default function Dashboard() {
         query = query.eq('project_id', filterProject)
       }
 
-      // Server-side status filtering
-      if (filterStatus) {
+      // Server-side status filtering (skip when grouping by status to show all tasks)
+      if (filterStatus && groupBy !== 'status') {
         query = query.eq('status', filterStatus)
       }
 
@@ -114,7 +114,7 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Error loading tasks:', error)
     }
-  }, [supabase, searchTerm, filterProject, filterStatus])
+  }, [supabase, searchTerm, filterProject, filterStatus, groupBy])
 
   // Separate function to load Focus Mode tasks with server-side filtering
   const loadFocusModeFilteredTasks = useCallback(async () => {
