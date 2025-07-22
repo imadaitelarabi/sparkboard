@@ -29,6 +29,7 @@ import {
   ClipboardCopy,
   Group,
   Ungroup,
+  Target,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { imageUploadService } from '@/lib/image-upload'
@@ -1742,6 +1743,20 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
       updateElementInDB(id, { layer_index: maxLayerIndex + 1 + index })
     })
   }
+
+  // Create task for selected elements and add to Focus Mode
+  function createTaskForFocusMode() {
+    if (selectedElementIds.length === 0) {
+      alert('Please select elements first')
+      return
+    }
+
+    // Set flag to indicate this task should be added to Focus Mode after creation
+    ;(window as Window & { addToFocusModeAfterCreation?: boolean }).addToFocusModeAfterCreation = true
+    
+    // Open the task creation modal (same as regular Create Task flow)
+    setIsCreateTaskModalOpen(true)
+  }
   
 
   // Render context menu
@@ -1784,6 +1799,30 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
         >
           <Plus className="h-4 w-4" />
           Create Task{selectedCount > 1 ? ` (${selectedCount})` : ''}
+        </button>
+
+        {/* Add to Focus Mode */}
+        <button
+          onClick={() => {
+            createTaskForFocusMode()
+            setContextMenu(null)
+          }}
+          className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-all"
+          style={{
+            color: 'var(--color-card-foreground)',
+            transitionDuration: 'var(--duration-normal)'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)'
+            e.currentTarget.style.opacity = '0.8'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.opacity = '1'
+          }}
+        >
+          <Target className="h-4 w-4" />
+          Create & Add to Focus Mode{selectedCount > 1 ? ` (${selectedCount})` : ''}
         </button>
         
         <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />

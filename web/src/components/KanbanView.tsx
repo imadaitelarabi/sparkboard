@@ -8,14 +8,14 @@ type Tables = Database['public']['Tables']
 type Task = Tables['tasks']['Row']
 type TaskCategory = Tables['task_categories']['Row']
 
-interface TaskWithDetails extends Task {
+export interface TaskWithDetails extends Task {
   category?: TaskCategory
   assignee?: { full_name: string }
   task_elements?: { element_id: string }[]
   project?: { name: string; id: string }
 }
 
-interface KanbanColumn {
+export interface KanbanColumn {
   id: string
   name: string
   color?: string
@@ -50,6 +50,9 @@ export default function KanbanView({
 
   function handleDragStart(taskId: string) {
     setDraggedTask(taskId)
+    // Set data for external drop targets
+    const dragEvent = new CustomEvent('taskDragStart', { detail: { taskId } })
+    window.dispatchEvent(dragEvent)
   }
 
   function handleDragOver(e: React.DragEvent) {
@@ -119,7 +122,17 @@ export default function KanbanView({
                   <div
                     key={task.id}
                     draggable={!!onTaskDrop}
-                    onDragStart={() => handleDragStart(task.id)}
+                    onDragStart={(e) => {
+                      handleDragStart(task.id)
+                      // Set drag data for better browser support
+                      e.dataTransfer.setData('text/plain', task.id)
+                      e.dataTransfer.effectAllowed = 'copy'
+                    }}
+                    onDragEnd={() => {
+                      setDraggedTask(null)
+                      // Dispatch drag end event for external listeners
+                      window.dispatchEvent(new Event('taskDragEnd'))
+                    }}
                     onClick={(e) => handleTaskClick(task, e)}
                     className={`bg-background border border-border rounded-md ${compact ? 'p-1.5' : 'p-2'} transition-all duration-normal ${
                       hasLinkedElements && onTaskClick
