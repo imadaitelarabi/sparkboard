@@ -46,7 +46,7 @@ import MarkdownEditModal from './MarkdownEditModal'
 import ThemeToggle from './ThemeToggle'
 import MarkdownText from './MarkdownText'
 import MarkdownToolbar from './MarkdownToolbar'
-import HybridRichTextEditor from './HybridRichTextEditor'
+import SimplifiedRichTextEditor from './SimplifiedRichTextEditor'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useRealtimeSync } from '@/hooks/useRealtimeSync'
 import { usePresence } from '@/hooks/usePresence'
@@ -1600,38 +1600,45 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
       (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1)
   }
 
-  // Helper function to calculate text dimensions based on content
+  // Helper function to calculate text dimensions for RENDERED content (read mode)
   function calculateTextDimensions(text: string, fontSize: number = 16): { width: number; height: number } {
     const lines = text.split('\n')
-    const padding = 16 // 8px padding on each side
+    const padding = 24 // 12px padding on each side
     const lineHeight = fontSize * 1.4
     
-    // Calculate width based on longest line
     let maxWidth = 0
+    let totalHeight = 0
+    
     lines.forEach(line => {
-      // Handle markdown headers
       let lineLength = line.length
       let lineFontSize = fontSize
+      let currentLineHeight = lineHeight
       
+      // Handle markdown headers for sizing (but keep full line length for textarea display)
       const headerMatch = line.match(/^(#{1,6})\s+(.+)$/)
       if (headerMatch) {
         const level = headerMatch[1].length
-        const headerSizeMultiplier = Math.max(1.2, 2.2 - (level - 1) * 0.2)
-        lineFontSize = fontSize * headerSizeMultiplier
-        lineLength = headerMatch[2].length
+        const headerMultiplier = Math.max(1.2, 2.2 - (level - 1) * 0.2)
+        lineFontSize = fontSize * headerMultiplier
+        currentLineHeight = lineHeight * headerMultiplier
+        // Keep full line length including markdown symbols for textarea display
+        lineLength = line.length
       }
       
-      // Estimate character width (more accurate than simple multiplication)
-      const avgCharWidth = lineFontSize * 0.55
+      // Handle bold/italic formatting (approximate extra width)
+      if (line.includes('**') || line.includes('*')) {
+        lineFontSize *= 1.1 // Slightly wider for bold/italic
+      }
+      
+      // Estimate character width based on actual font size that will be rendered
+      const avgCharWidth = lineFontSize * 0.6
       const lineWidth = lineLength * avgCharWidth
       maxWidth = Math.max(maxWidth, lineWidth)
+      totalHeight += currentLineHeight
     })
     
-    // Calculate height
-    const height = Math.max(50, lines.length * lineHeight + padding)
-    
-    // Set minimum and maximum constraints
-    const width = Math.max(120, Math.min(maxWidth + padding, 600))
+    const height = Math.max(50, totalHeight + padding)
+    const width = Math.max(150, Math.min(maxWidth + padding, 800))
     
     return { width, height }
   }
@@ -3560,7 +3567,7 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
         const scaledHeight = (element.height || 100) * stageScale
         
         return (
-          <HybridRichTextEditor
+          <SimplifiedRichTextEditor
             x={absoluteX}
             y={absoluteY}
             width={scaledWidth}
