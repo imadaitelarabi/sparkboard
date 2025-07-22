@@ -1,170 +1,157 @@
-📝 Product Requirements Document (PRD)
+# SparkBoard
 
-Product Name: SparkBoard
-Owner: Imad
-Date: July 19, 2025
-1️⃣ Objective
+The first developer-friendly whiteboard built for daily projects. SparkBoard combines visual brainstorming with powerful project management, letting you seamlessly convert ideas into actionable tasks with real-time collaboration.
 
-Build a collaborative whiteboard tool designed for project management with a minimal, intuitive interface.
-Users can visually brainstorm, collaborate in real-time, and easily convert visual elements into tasks linked to their projects.
-2️⃣ Core Features
-✅ 1. Project & Board Management
+![SparkBoard](web/public/logo.png)
 
-    A user can create multiple Projects.
+## ✨ Features
 
-    Each Project contains:
+- **Infinite Canvas**: Pan and zoom on an unlimited whiteboard space
+- **Real-time Collaboration**: Multiple users with live cursors and instant updates
+- **Element Creation**: Sticky notes, shapes, text, connectors, and freehand drawing
+- **Task Management**: Convert whiteboard elements directly into Kanban tasks
+- **Project Organization**: Multiple projects with dedicated whiteboards and task boards
+- **Live Sharing**: Share boards with team members and external collaborators
 
-        Multiple Whiteboards (nameable, sharable).
+## 🚀 Quick Start
 
-        One Tasks Board (Kanban style).
+### Try the Live Demo
 
-    Boards are switchable via a sidebar or tab menu.
+Visit [SparkBoard Cloud](https://board.hellospark.tech) to try the application without any setup.
 
-✅ 2. Whiteboard Core Features
+### Local Development Setup
 
-    Infinite canvas with pan/zoom.
+#### Prerequisites
 
-    Basic elements:
+- **Node.js** (v18 or higher)
+- **npm** or **yarn**
+- **Docker** (for local Supabase)
+- **Supabase CLI** (`npm install -g supabase`)
+
+#### Step-by-step Setup
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/imadaitelarabi/sparkboard.git
+   cd sparkboard
+   ```
 
-        Sticky Notes
+2. **Start Supabase locally**
+   ```bash
+   cd supabase
+   make db-local
+   ```
+   This will start Supabase at `http://127.0.0.1:54321` with Studio at `http://127.0.0.1:54323`.
 
-        Shapes (Rectangle, Circle, Arrow)
+3. **Apply database migrations**
+   ```bash
+   make migrate-local
+   ```
 
-        Text
+4. **Generate TypeScript types**
+   ```bash
+   make gen-types
+   ```
 
-        Connectors
+5. **Install frontend dependencies**
+   ```bash
+   cd ../web
+   npm install
+   ```
 
-        Freehand draw
+6. **Start the development server**
+   ```bash
+   npm run dev
+   ```
 
-    Select single/multiple elements via drag-select or shift+click.
+7. **Open your browser**
+   Visit `http://localhost:3000` to see SparkBoard running locally.
 
-    Group/Ungroup elements.
+#### Environment Variables
 
-    Collaborative real-time editing (multi-user cursor).
+Create a `.env.local` file in the `/web` directory with the following variables:
 
-    Elements can be:
+```bash
+# Essential for local development
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 
-        Edited
+# Optional but recommended for full functionality
+RESEND_API_KEY=your-resend-api-key-here
+RESEND_FROM_EMAIL="SparkBoard <noreply@yourdomain.com>"
 
-        Moved
+# Recommended to be true in production
+NEXT_PUBLIC_ENABLE_OAUTH=false
+```
 
-        Deleted
+**For Production:**
+- Get your Supabase URL and keys from [Supabase Dashboard](https://supabase.com/dashboard) → Settings → API
+- Sign up for [Resend](https://resend.com) for email functionality
+- Configure OAuth providers if needed (Google, GitHub)
 
-        Selected & turned into a Task.
+#### Available Commands
 
-✅ 3. Create Tasks from Elements
+**Frontend** (from `/web` directory):
+- `npm run dev` - Start development server with Turbopack
+- `npm run build` - Build for production
+- `npm run start` - Start production server
+- `npm run lint` - Lint code
 
-    After selecting one or multiple elements:
+**Database** (from `/supabase` directory):
+- `make db-local` - Start local Supabase
+- `make migrate-local` - Apply migrations locally
+- `make new-migration NAME=migration_name` - Create new migration
+- `make gen-types` - Generate TypeScript types
+- `make db-status` - Check migration status
 
-        “Create Task” action triggers a modal with:
+## 🏗️ Architecture
 
-            Task Title (pre-filled from selected text if any)
+- **Frontend**: Next.js 15 with React 19, TypeScript, and Tailwind CSS
+- **Backend**: Supabase (PostgreSQL, Authentication, Real-time)
+- **Canvas**: Konva.js for high-performance 2D canvas rendering
+- **State Management**: Zustand for client state
+- **Deployment**: Vercel for frontend, Supabase Cloud for backend
 
-            Description (optional)
+## 🗺️ Roadmap
 
-            Category (from Kanban Board)
+### MVP (Current)
+- [x] Create task from an element
+- [x] View task just take you to your element in the whiteboard  
+- [x] Projects
+- [] Cmd + k Universal search
+- [] Emojies element
+- [] Focus mode
+- [] Lock Elements
+- [] Edit single elements inside a group of elements
 
-            Assignee
+### Post MVP (Next)
+- [ ] Documents/Doc reference as an element in a whiteboard
+- [ ] Actions (v1.0) supports claude code action
 
-            Due Date
+### Future
+- [ ] Would love to hear your ideas
 
-        Once created:
+Want to contribute to any of these features? Check out our [Contributing Guide](CONTRIBUTING.md)!
 
-            Task appears on the Tasks Board.
+## 🤝 Contributing
 
-            Related elements on whiteboard get a small Task Badge/Icon.
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
 
-            Clicking on the task in the Tasks Board highlights/zooms to elements in the whiteboard.
+- Code of conduct
+- Development workflow
+- Pull request process
+- Issue reporting
 
-✅ 4. Tasks Board (Per Project)
+## 📄 License
 
-    Tasks Board is a Whiteboard with flexible Kanban categories.
+This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
 
-    Categories can be:
+## 🛠️ Tech Stack
 
-        Created
-
-        Renamed
-
-        Deleted
-
-        Reordered
-
-    Tasks are movable between categories.
-
-    Each Task Card:
-
-        Title
-
-        Assignee
-
-        Due Date
-
-        Linked Whiteboard Elements (Click to zoom)
-
-    Optional task details on click (popup or side panel).
-
-✅ 5. Dashboard
-
-    Global view of:
-
-        All Projects
-
-        Task Previews (Kanban/List)
-
-        Filter by:
-
-            Project
-
-            Status
-
-            Assignee
-
-            Due Date
-
-    Clicking a Task on Dashboard:
-
-        Opens related Project and highlights the related elements on its Whiteboard.
-
-3️⃣ Collaboration Features
-
-    Live cursors & element locking.
-
-    Real-time task updates.
-
-    User avatars with online status.
-
-    Comments on tasks (optional, v2).
-
-4️⃣ MVP Scope Summary
-Feature	Status
-Project & Board Management	✅
-Whiteboard Basic Elements	✅
-Selection & Task Creation	✅
-Task Kanban Board	✅
-Dashboard with Filters	✅
-Real-time Collaboration	✅
-5️⃣ User Flows
-
-[Flow 1] Create Project & Whiteboards
-User → Create Project → Add Whiteboard(s) → Start drawing/brainstorming.
-
-[Flow 2] Select Elements → Create Task
-User selects elements → Clicks "Create Task" → Task is created & linked.
-
-[Flow 3] View Tasks on Task Board
-User opens Task Board → See tasks grouped by category → Moves/updates them.
-
-[Flow 4] Use Dashboard
-User opens Dashboard → Filters tasks → Clicks a task → Navigated to Project Whiteboard.
-
-
-7️⃣ Tech Stack Suggestion
-
-    Frontend: NextJS + Konva.js / Fabric.js (Whiteboard), Zustand, Tailwind
-
-    Backend: Supabase (Auth, DB, Realtime)
-
-    Collab Layer: Liveblocks or Yjs
-
-    Deployment: Vercel
+- **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
+- **Canvas**: Konva.js for whiteboard rendering
+- **Backend**: Supabase (PostgreSQL, Auth, Real-time)
+- **State Management**: Zustand
+- **Deployment**: Vercel + Supabase Cloud
