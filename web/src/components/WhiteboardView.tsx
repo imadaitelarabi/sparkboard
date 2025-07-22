@@ -46,7 +46,7 @@ import MarkdownEditModal from './MarkdownEditModal'
 import ThemeToggle from './ThemeToggle'
 import MarkdownText from './MarkdownText'
 import MarkdownToolbar from './MarkdownToolbar'
-import InlineMarkdownEditor from './InlineMarkdownEditor'
+import HybridRichTextEditor from './HybridRichTextEditor'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useRealtimeSync } from '@/hooks/useRealtimeSync'
 import { usePresence } from '@/hooks/usePresence'
@@ -3509,7 +3509,7 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
         const scaledHeight = (element.height || 100) * stageScale
         
         return (
-          <InlineMarkdownEditor
+          <HybridRichTextEditor
             x={absoluteX}
             y={absoluteY}
             width={scaledWidth}
