@@ -128,6 +128,51 @@ export default function InlineRichTextEditor({
     }
   }, [])
 
+  // Function to execute rich text formatting commands
+  const executeCommand = useCallback((command: string, value?: string) => {
+    if (!editorRef.current) return
+    
+    isFormattingRef.current = true
+    
+    // Store selection before command
+    const selection = window.getSelection()
+    let range: Range | null = null
+    if (selection && selection.rangeCount > 0) {
+      range = selection.getRangeAt(0).cloneRange()
+    }
+    
+    try {
+      document.execCommand(command, false, value)
+      // Update our state with the new content
+      setHtmlContent(editorRef.current.innerHTML)
+    } catch (error) {
+      console.warn('execCommand failed:', command, error)
+    }
+    
+    // Refocus and restore selection
+    setTimeout(() => {
+      if (editorRef.current) {
+        editorRef.current.focus()
+        
+        // Try to restore selection
+        if (range && selection) {
+          try {
+            selection.removeAllRanges()
+            selection.addRange(range)
+          } catch (e) {
+            // If range restoration fails, just place cursor at end
+            const newRange = document.createRange()
+            newRange.selectNodeContents(editorRef.current)
+            newRange.collapse(false)
+            selection.removeAllRanges()
+            selection.addRange(newRange)
+          }
+        }
+      }
+      isFormattingRef.current = false
+    }, 0)
+  }, [])
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     // Handle special keys first
     if (e.key === 'Escape') {
@@ -204,51 +249,6 @@ export default function InlineRichTextEditor({
     }
     handleSave()
   }, [handleSave])
-
-  // Function to execute rich text formatting commands
-  const executeCommand = useCallback((command: string, value?: string) => {
-    if (!editorRef.current) return
-    
-    isFormattingRef.current = true
-    
-    // Store selection before command
-    const selection = window.getSelection()
-    let range: Range | null = null
-    if (selection && selection.rangeCount > 0) {
-      range = selection.getRangeAt(0).cloneRange()
-    }
-    
-    try {
-      document.execCommand(command, false, value)
-      // Update our state with the new content
-      setHtmlContent(editorRef.current.innerHTML)
-    } catch (error) {
-      console.warn('execCommand failed:', command, error)
-    }
-    
-    // Refocus and restore selection
-    setTimeout(() => {
-      if (editorRef.current) {
-        editorRef.current.focus()
-        
-        // Try to restore selection
-        if (range && selection) {
-          try {
-            selection.removeAllRanges()
-            selection.addRange(range)
-          } catch (e) {
-            // If range restoration fails, just place cursor at end
-            const newRange = document.createRange()
-            newRange.selectNodeContents(editorRef.current)
-            newRange.collapse(false)
-            selection.removeAllRanges()
-            selection.addRange(newRange)
-          }
-        }
-      }
-      isFormattingRef.current = false
-    }, 0)
-  }, [])
 
   // Expose executeCommand function to parent (for toolbar)
   useEffect(() => {
