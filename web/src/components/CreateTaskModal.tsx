@@ -7,6 +7,8 @@ import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
 import { Database } from '@/types/database.types'
 import { ElementProperties } from '@/types/element.types'
+import { addTaskToFocusMode } from '@/utils/focusMode'
+import { useToast } from '@/hooks/useToast'
 
 type Tables = Database['public']['Tables']
 type TaskCategory = Tables['task_categories']['Row']
@@ -19,6 +21,7 @@ interface CreateTaskModalProps {
 
 export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: CreateTaskModalProps) {
   const supabase = createClient()
+  const { success } = useToast()
   const { 
     currentProject, 
     selectedElementIds, 
@@ -282,6 +285,18 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
 
       // Update local state
       addTask(task)
+      
+      // Check if this task should be added to Focus Mode
+      if ((window as Window & { addToFocusModeAfterCreation?: boolean }).addToFocusModeAfterCreation) {
+        addTaskToFocusMode(task.id)
+        // Clear the flag
+        delete (window as Window & { addToFocusModeAfterCreation?: boolean }).addToFocusModeAfterCreation
+        // Show success message
+        setTimeout(() => {
+          success(`Task "${task.title}" created and added to Focus Mode!`)
+        }, 100)
+      }
+      
       clearSelection()
       onTaskCreated?.()
       onClose()
