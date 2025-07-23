@@ -414,12 +414,31 @@ export default function Dashboard() {
         )
       )
 
-      // Reload tasks to ensure UI reflects all changes including category sync
-      await loadTasks()
+      // Reload tasks in background after a short delay to avoid state clearing
+      // This ensures UI reflects all changes including category sync without flickering
+      setTimeout(async () => {
+        try {
+          if (isFocusModeActive && !isAddingTasksToFocus) {
+            await loadFocusModeFilteredTasks()
+          } else {
+            await loadTasks()
+          }
+        } catch (reloadError) {
+          console.error('Error reloading tasks after update:', reloadError)
+          // If reload fails, the optimistic update will remain
+        }
+      }, 100) // Small delay to prevent state clearing
 
     } catch (err) {
       console.error('Error updating task:', err)
       error('Failed to update task')
+      
+      // Revert optimistic update on error by reloading
+      if (isFocusModeActive && !isAddingTasksToFocus) {
+        await loadFocusModeFilteredTasks()
+      } else {
+        await loadTasks()
+      }
     }
   }
 
