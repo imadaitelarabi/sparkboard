@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
 import { saveDashboardFilters, loadDashboardFilters, defaultDashboardFilters } from '@/utils/dashboardFilters'
 import { getFocusMode, toggleFocusMode, addMultipleTasksToFocusMode, addTaskToFocusMode, removeTaskFromFocusMode, manualResetFocusMode, getTimeUntilReset, formatTimeUntilReset, type FocusMode } from '@/utils/focusMode'
+import { updateTaskWithSync } from '@/utils/taskSync'
 import { useToast } from '@/hooks/useToast'
 import AuthForm from './AuthForm'
 import InputModal from './InputModal'
@@ -358,9 +359,12 @@ export default function Dashboard() {
   // Handle task updates in Focus Mode kanban (status, priority, or project changes)
   async function handleFocusModeTaskDrop(taskId: string, columnId: string) {
     try {
-      const updateData: Record<string, string | null> = {}
-      
       // Determine what to update based on groupBy mode
+      const updateOptions: Parameters<typeof updateTaskWithSync>[0] = {
+        taskId,
+        supabase
+      }
+
       switch (groupBy) {
         case 'status':
           // Map column IDs to status values
@@ -371,7 +375,7 @@ export default function Dashboard() {
           }
           const newStatus = statusMap[columnId]
           if (newStatus) {
-            updateData.status = newStatus
+            updateOptions.status = newStatus
           }
           break
           
@@ -384,37 +388,36 @@ export default function Dashboard() {
           }
           const newPriority = priorityMap[columnId]
           if (newPriority) {
-            updateData.priority = newPriority
+            updateOptions.priority = newPriority
           }
           break
           
         case 'project':
           // Map column IDs to project IDs (columnId is already project_id)
           if (columnId !== 'unassigned') {
-            updateData.project_id = columnId
+            updateOptions.projectId = columnId
           } else {
-            updateData.project_id = null
+            updateOptions.projectId = null
           }
           break
       }
 
-      // Update task in database
-      const { error } = await supabase
-        .from('tasks')
-        .update(updateData)
-        .eq('id', taskId)
+      // Use unified update function that syncs status and category
+      const result = await updateTaskWithSync(updateOptions)
 
-      if (error) throw error
-
-      // Update local state
+      // Update local state with the fields that were actually updated
       setTasks(prevTasks =>
         prevTasks.map(task =>
-          task.id === taskId ? { ...task, ...updateData } : task
+          task.id === taskId ? { ...task, ...result.updatedFields } : task
         )
       )
 
-    } catch (error) {
-      console.error('Error updating task:', error)
+      // Reload tasks to ensure UI reflects all changes including category sync
+      await loadTasks()
+
+    } catch (err) {
+      console.error('Error updating task:', err)
+      error('Failed to update task')
     }
   }
 
