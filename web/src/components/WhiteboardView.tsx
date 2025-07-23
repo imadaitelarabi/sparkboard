@@ -45,7 +45,6 @@ import {
 import CreateTaskModal from './CreateTaskModal'
 import InputModal from './InputModal'
 import MarkdownEditModal from './MarkdownEditModal'
-import ThemeToggle from './ThemeToggle'
 import MarkdownText from './MarkdownText'
 import MarkdownToolbar from './MarkdownToolbar'
 import SimplifiedRichTextEditor from './SimplifiedRichTextEditor'
@@ -3279,7 +3278,6 @@ export default function WhiteboardView({ board, accessLevel = 'admin' }: Whitebo
                 </div>
               )}
             </div>
-            <ThemeToggle />
           </div>
         </div>
 

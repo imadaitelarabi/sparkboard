@@ -821,7 +821,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-screen bg-background overflow-hidden">
       {/* Header */}
       <header className="bg-card border-b border-border px-5 py-3">
         <div className="flex items-center justify-between">
@@ -849,9 +849,9 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <div className="flex">
+      <div className="flex h-full">
         {/* Sidebar */}
-        <aside className="w-52 bg-card border-r border-border min-h-screen p-5">
+        <aside className="w-52 bg-card border-r border-border h-full p-5 overflow-y-auto">
           <h2 className="text-base font-semibold text-foreground mb-3">Projects</h2>
           <div className="space-y-1">
             {projects.map((project) => (
@@ -868,10 +868,10 @@ export default function Dashboard() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 p-5">
+        <main className="flex-1 py-5 overflow-y-auto flex flex-col">
           {/* Focus Mode Header - shown when active */}
           {isFocusModeActive && (
-            <div className="mb-4 bg-card rounded-lg border border-border p-4">
+            <div className="mb-4 mx-5 bg-card rounded-lg border border-border p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Target className="h-6 w-6 text-[var(--color-primary)]" />
@@ -923,7 +923,7 @@ export default function Dashboard() {
           )}
 
           {/* Controls */}
-          <div className="bg-card rounded-lg border border-border p-3 mb-5">
+          <div className="mx-5 bg-card rounded-lg border border-border p-3 mb-5">
             <div className="flex flex-wrap gap-3 items-center">
               {!isFocusModeActive || isAddingTasksToFocus ? (
                 /* Normal Mode OR Add Tasks Mode: Full filters */
@@ -1061,7 +1061,7 @@ export default function Dashboard() {
             /* Focus Mode Views */
             isAddingTasksToFocus ? (
               /* Add Tasks to Focus Mode View */
-              <div className="h-[calc(96vh-180px)] relative">
+              <div className="flex-1 relative">
                 {/* Show normal kanban grouped by project for selection */}
                 <div className="h-full">
                   {areAllTasksInFocusMode() ? (
@@ -1214,7 +1214,7 @@ export default function Dashboard() {
               </div>
             ) : focusModeTasks.length === 0 ? (
               /* Focus Mode Empty State */
-              <div className="flex items-center justify-center h-[calc(96vh-180px)]">
+              <div className="flex items-center justify-center flex-1">
                 <div className="text-center max-w-md">
                   <div className="mb-6">
                     <div className="w-16 h-16 bg-[var(--color-primary-100)] rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1241,7 +1241,7 @@ export default function Dashboard() {
               </div>
             ) : (
               /* Focus Mode Kanban */
-              <div className="h-[calc(96vh-180px)]">
+              <div className="flex-1">
                 <KanbanView
                   columns={getFocusModeColumns()}
                   onTaskClick={handleTaskClick}
@@ -1321,7 +1321,7 @@ export default function Dashboard() {
                 </div>
               ) : (
                 /* Kanban View */
-                <div className="h-[calc(96vh-180px)]">
+                <div className="flex-1 overflow-hidden">
                   <KanbanView
                     columns={getKanbanColumns()}
                     onTaskClick={handleTaskClick}
@@ -1331,7 +1331,7 @@ export default function Dashboard() {
               )}
 
               {filteredTasks.length === 0 && (
-                <div className="flex items-center justify-center h-[calc(96vh-180px)]">
+                <div className="flex items-center justify-center flex-1">
                   <div className="text-center">
                     <div className="text-muted-foreground mb-3">
                       <FolderOpen className="h-10 w-10 mx-auto" />
