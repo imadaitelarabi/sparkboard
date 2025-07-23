@@ -317,12 +317,12 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
   }
 
   return (
-    <div className="h-full bg-background p-5 overflow-auto">
-      <div className="flex gap-5 min-h-full">
+    <div className="h-full bg-background overflow-x-auto overflow-y-hidden">
+      <div className="flex gap-5 h-full p-5 min-w-fit">
         {taskCategories.map((category) => (
           <div
             key={category.id}
-            className="flex-shrink-0 w-72 bg-card rounded-lg border border-border"
+            className="flex-shrink-0 w-72 bg-card rounded-lg border border-border flex flex-col h-full"
             onDragOver={handleDragOver}
             onDrop={(e) => handleDrop(e, category.id)}
           >
@@ -350,7 +350,7 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
             </div>
 
             {/* Tasks */}
-            <div className="p-3 space-y-2 min-h-28">
+            <div className="p-3 space-y-2 flex-1 overflow-y-auto">
               {getTasksByCategory(category.id).map((task: TaskWithDetails) => {
                 const hasLinkedElements = task.task_elements && task.task_elements.length > 0
                 
@@ -481,10 +481,10 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
         ))}
 
         {/* Add Category */}
-        <div className="flex-shrink-0 w-72">
+        <div className="flex-shrink-0 w-72 h-full">
           <button
             onClick={() => setShowCreateCategoryModal(true)}
-            className="w-full h-28 border-2 border-dashed border-border rounded-lg hover:border-muted-foreground transition-colors flex items-center justify-center text-muted-foreground hover:text-foreground"
+            className="w-full h-full border-2 border-dashed border-border rounded-lg hover:border-muted-foreground transition-colors flex items-center justify-center text-muted-foreground hover:text-foreground"
           >
             <div className="text-center">
               <Plus className="h-5 w-5 mx-auto mb-1" />
