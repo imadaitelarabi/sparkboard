@@ -1328,17 +1328,19 @@ export default function Dashboard() {
               )}
 
               {filteredTasks.length === 0 && (
-                <div className="text-center py-10">
-                  <div className="text-muted-foreground mb-3">
-                    <FolderOpen className="h-10 w-10 mx-auto" />
+                <div className="flex items-center justify-center h-[calc(96vh-180px)]">
+                  <div className="text-center">
+                    <div className="text-muted-foreground mb-3">
+                      <FolderOpen className="h-10 w-10 mx-auto" />
+                    </div>
+                    <h3 className="text-base font-medium text-foreground mb-2">No tasks found</h3>
+                    <p className="text-muted-foreground text-sm">
+                      {tasks.length === 0 
+                        ? "Create a project and start adding tasks to see them here."
+                        : "Try adjusting your search or filters."
+                      }
+                    </p>
                   </div>
-                  <h3 className="text-base font-medium text-foreground mb-2">No tasks found</h3>
-                  <p className="text-muted-foreground text-sm">
-                    {tasks.length === 0 
-                      ? "Create a project and start adding tasks to see them here."
-                      : "Try adjusting your search or filters."
-                    }
-                  </p>
                 </div>
               )}
             </>
