@@ -650,8 +650,10 @@ export default function Dashboard() {
     const existingFocusTaskIds = new Set(focusMode?.tasks.map(ft => ft.id) || [])
     
     // Filter out tasks that are already in Focus Mode
+    // Only show tasks with 'pending' (todo) or 'in_progress' status
     const availableTasksForFocus = filteredTasks.filter(task => 
-      !existingFocusTaskIds.has(task.id)
+      !existingFocusTaskIds.has(task.id) && 
+      (task.status === 'pending' || task.status === 'in_progress')
     )
     
     // Add tasks to their project groups
@@ -675,15 +677,22 @@ export default function Dashboard() {
   
   // Check if all tasks are already in Focus Mode
   function areAllTasksInFocusMode(): boolean {
-    if (filteredTasks.length === 0) return false
+    // Only consider tasks with 'pending' or 'in_progress' status
+    const eligibleTasks = filteredTasks.filter(task => 
+      task.status === 'pending' || task.status === 'in_progress'
+    )
+    if (eligibleTasks.length === 0) return false
     const existingFocusTaskIds = new Set(focusMode?.tasks.map(ft => ft.id) || [])
-    return filteredTasks.every(task => existingFocusTaskIds.has(task.id))
+    return eligibleTasks.every(task => existingFocusTaskIds.has(task.id))
   }
   
   // Get count of available tasks for Focus Mode
   function getAvailableTasksCount(): number {
     const existingFocusTaskIds = new Set(focusMode?.tasks.map(ft => ft.id) || [])
-    return filteredTasks.filter(task => !existingFocusTaskIds.has(task.id)).length
+    return filteredTasks.filter(task => 
+      !existingFocusTaskIds.has(task.id) && 
+      (task.status === 'pending' || task.status === 'in_progress')
+    ).length
   }
 
   // Tasks are now filtered server-side, so we use them directly
