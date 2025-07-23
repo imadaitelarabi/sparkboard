@@ -155,7 +155,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadData()
-    if (!isFocusModeActive) {
+    if (!isFocusModeActive || isAddingTasksToFocus) {
       loadTasks()
     } else {
       loadFocusModeFilteredTasks()
@@ -184,7 +184,7 @@ export default function Dashboard() {
       if (event === 'SIGNED_IN' && session?.user) {
         setUser(session.user)
         loadData()
-        if (!isFocusModeActive) {
+        if (!isFocusModeActive || isAddingTasksToFocus) {
           loadTasks()
         } else {
           loadFocusModeFilteredTasks()
@@ -210,14 +210,14 @@ export default function Dashboard() {
     })
 
     return () => subscription.unsubscribe()
-  }, [loadData, loadTasks, loadFocusModeFilteredTasks, isFocusModeActive, supabase.auth, setUser, setProjects, setTasks, searchParams, router])
+  }, [loadData, loadTasks, loadFocusModeFilteredTasks, isFocusModeActive, isAddingTasksToFocus, supabase.auth, setUser, setProjects, setTasks, searchParams, router])
 
-  // Load tasks when filters change (for normal mode)
+  // Load tasks when filters change (for normal mode or add tasks mode)
   useEffect(() => {
-    if (user && !isFocusModeActive) { // Only load tasks if user is authenticated and not in Focus Mode
+    if (user && (!isFocusModeActive || isAddingTasksToFocus)) { // Load tasks if not in Focus Mode OR if adding tasks to focus
       loadTasks()
     }
-  }, [searchTerm, filterProject, filterStatus, loadTasks, user, isFocusModeActive])
+  }, [searchTerm, filterProject, filterStatus, loadTasks, user, isFocusModeActive, isAddingTasksToFocus])
 
   // Load Focus Mode tasks when Focus Mode search changes
   useEffect(() => {
@@ -324,6 +324,8 @@ export default function Dashboard() {
 
   function handleAddTasksToFocus() {
     setIsAddingTasksToFocus(true)
+    // Load all tasks when entering add tasks mode
+    loadTasks()
   }
 
   function handleCancelAddingTasks() {
