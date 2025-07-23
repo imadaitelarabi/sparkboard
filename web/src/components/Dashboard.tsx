@@ -99,8 +99,8 @@ export default function Dashboard() {
         query = query.eq('project_id', filterProject)
       }
 
-      // Server-side status filtering (skip when grouping by status to show all tasks)
-      if (filterStatus && groupBy !== 'status') {
+      // Server-side status filtering
+      if (filterStatus) {
         query = query.eq('status', filterStatus)
       }
 
