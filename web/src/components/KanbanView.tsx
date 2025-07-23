@@ -77,10 +77,14 @@ export default function KanbanView({
   const columnWidth = compact ? 'w-60' : 'w-72'
   const cardPadding = compact ? 'p-2' : 'p-3'
   const headerPadding = compact ? 'p-2' : 'p-3'
+  const columnWidthPx = compact ? 240 : 288 // w-60 = 240px, w-72 = 288px
+  const gapPx = 20 // gap-5 = 20px
+  const paddingPx = 40 // p-5 = 20px on each side
+  const minWidth = columns.length * columnWidthPx + (columns.length - 1) * gapPx + paddingPx
 
   return (
     <div className="h-full bg-background overflow-x-auto overflow-y-hidden">
-      <div className="flex gap-5 h-full p-5 min-w-fit">
+      <div className="flex gap-5 h-full p-5" style={{ minWidth: `${minWidth}px` }}>
         {columns.map((column) => (
           <div
             key={column.id}
