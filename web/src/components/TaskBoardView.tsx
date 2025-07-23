@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
 import { useRouter } from 'next/navigation'
 import { Database } from '@/types/database.types'
+import { updateTaskWithSync } from '@/utils/taskSync'
 import InputModal from './InputModal'
 import ConfirmationModal from './ConfirmationModal'
 import TaskEditModal from './TaskEditModal'
@@ -129,19 +130,23 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
 
   async function updateTaskCategory(taskId: string, newCategoryId: string) {
     try {
-      const { error } = await supabase
-        .from('tasks')
-        .update({ category_id: newCategoryId })
-        .eq('id', taskId)
+      // Use unified update function that syncs status and category
+      const result = await updateTaskWithSync({
+        taskId,
+        supabase,
+        categoryId: newCategoryId
+      })
 
-      if (error) throw error
-
-      // Update local state
+      // Update local state with all fields that were updated
       setTasks(tasks.map(task => 
         task.id === taskId 
-          ? { ...task, category_id: newCategoryId }
+          ? { ...task, ...result.updatedFields }
           : task
       ))
+
+      // Reload tasks to ensure UI reflects all changes including status sync
+      await loadTasksAndCategories()
+
     } catch (error) {
       console.error('Error updating task category:', error)
     }
@@ -186,19 +191,45 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
 
   async function updateTask(taskId: string, updates: Partial<Task>) {
     try {
-      const { error } = await supabase
-        .from('tasks')
-        .update(updates)
-        .eq('id', taskId)
+      // Check if updates include status or category_id that need sync
+      const needsSync = 'status' in updates || 'category_id' in updates
 
-      if (error) throw error
+      if (needsSync) {
+        // Use unified update function for status/category sync
+        const result = await updateTaskWithSync({
+          taskId,
+          supabase,
+          status: updates.status || undefined,
+          categoryId: updates.category_id || undefined,
+          priority: updates.priority || undefined,
+          projectId: updates.project_id || undefined
+        })
 
-      // Update local state
-      setTasks(tasks.map(task => 
-        task.id === taskId 
-          ? { ...task, ...updates }
-          : task
-      ))
+        // Update local state with all fields that were updated
+        setTasks(tasks.map(task => 
+          task.id === taskId 
+            ? { ...task, ...result.updatedFields }
+            : task
+        ))
+
+        // Reload tasks to ensure UI reflects all changes
+        await loadTasksAndCategories()
+      } else {
+        // Use direct update for other fields
+        const { error } = await supabase
+          .from('tasks')
+          .update(updates)
+          .eq('id', taskId)
+
+        if (error) throw error
+
+        // Update local state
+        setTasks(tasks.map(task => 
+          task.id === taskId 
+            ? { ...task, ...updates }
+            : task
+        ))
+      }
     } catch (error) {
       console.error('Error updating task:', error)
     }
