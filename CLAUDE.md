@@ -66,3 +66,45 @@ The project implements a collaborative whiteboard with these key features:
 ## Environment Configuration
 
 Local development uses Supabase at `http://127.0.0.1:54321` with Studio at `http://127.0.0.1:54323`. The Makefile handles environment switching and credential management.
+
+## Design Guidelines & UI Patterns
+
+SparkBoard follows a **"Whimsical Modern"** design philosophy that balances professional functionality with playful, delightful interactions.
+
+### Design Theme
+- **Visual Style**: Soft gradient-heavy aesthetics with gentle curves and smooth transitions
+- **Color Palette**: Purple-indigo primary (`#8b5cf6` to `#6366f1`) with blue/emerald accents
+- **Typography**: Geist Sans (scaled 20% smaller for compact feel)
+- **Theme Support**: Light, dark, and system themes with comprehensive CSS variables
+
+### Component Patterns
+- **Core Components**: Dashboard, Modal, ProjectLayout, WhiteboardView, KanbanView, ThemeToggle
+- **Styling Approach**: CSS-first with Tailwind CSS v4 integration using `@theme inline`
+- **Animations**: 300ms transitions with bounce timing function for playful interactions
+- **Layout**: Grid-based responsive design with consistent spacing system
+
+### Usage Guidelines
+
+#### When Creating New Components
+1. **Follow existing patterns**: Use `whimsical-card`, `floating-panel`, `gradient-button` utility classes
+2. **Maintain color consistency**: Use CSS variables for theming (`--color-primary`, `--color-foreground`)
+3. **Apply standard animations**: Use 300ms transitions with bounce effects for interactions
+4. **Ensure theme compatibility**: Test components in both light and dark modes
+
+#### Styling Conventions
+- **Gradients first**: Use gradient backgrounds with solid fallbacks
+- **Rounded corners**: 8px base radius with scaled variations (sm: 3px, 3xl: 19px)
+- **Shadow system**: Apply `--shadow-whimsical` and `--shadow-floating` for depth
+- **Interactive states**: Include hover, focus, and active states with transform/shadow changes
+
+#### Accessibility Requirements
+- **Focus management**: Proper focus rings using primary color
+- **Keyboard navigation**: Support escape key handling and tab navigation
+- **Semantic HTML**: Use appropriate ARIA labels and semantic elements
+- **Color contrast**: Ensure sufficient contrast in both light and dark themes
+
+#### File Organization
+- **Components**: Place reusable UI components in `web/src/components/`
+- **Pages**: Use App Router structure in `web/src/app/`
+- **Styles**: Leverage CSS variables defined in global styles
+- **Types**: Generate and update TypeScript types after database changes
