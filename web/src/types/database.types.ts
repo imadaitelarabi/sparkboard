@@ -17,10 +17,10 @@ export type Database = {
     Functions: {
       graphql: {
         Args: {
-          variables?: Json
-          operationName?: string
           query?: string
           extensions?: Json
+          variables?: Json
+          operationName?: string
         }
         Returns: Json
       }
@@ -567,12 +567,18 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
+      get_user_project_memberships: {
+        Args: { user_uuid?: string }
+        Returns: {
+          project_id: string
+        }[]
+      }
       is_project_member: {
         Args: { user_uuid: string; project_uuid: string }
         Returns: boolean
       }
       is_project_owner: {
-        Args: { user_uuid: string; project_uuid: string }
+        Args: { project_uuid: string; user_uuid: string }
         Returns: boolean
       }
       user_can_edit_board: {
@@ -580,7 +586,7 @@ export type Database = {
         Returns: boolean
       }
       user_has_board_access: {
-        Args: { board_uuid: string; user_uuid?: string }
+        Args: { user_uuid?: string; board_uuid: string }
         Returns: boolean
       }
     }
