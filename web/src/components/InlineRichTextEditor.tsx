@@ -108,7 +108,7 @@ export default function InlineRichTextEditor({
     }
   }, [htmlContent, initialValue, onSave, onCancel])
 
-  const handleInput = useCallback((e: React.FormEvent<HTMLDivElement>) => {
+  const handleInput = useCallback((_e: React.FormEvent<HTMLDivElement>) => {
     if (editorRef.current) {
       // Clean up the HTML to prevent contentEditable artifacts
       const content = editorRef.current.innerHTML
@@ -117,16 +117,16 @@ export default function InlineRichTextEditor({
   }, [])
 
   // Handle selection changes to maintain cursor position
-  const handleSelectionChange = useCallback(() => {
-    if (isFormattingRef.current) return
+  // const handleSelectionChange = useCallback(() => {
+  //   if (isFormattingRef.current) return
     
-    const selection = window.getSelection()
-    if (selection && selection.rangeCount > 0 && editorRef.current) {
-      // Store selection for restoration after updates
-      const range = selection.getRangeAt(0)
-      // You can add selection preservation logic here if needed
-    }
-  }, [])
+  //   const selection = window.getSelection()
+  //   if (selection && selection.rangeCount > 0 && editorRef.current) {
+  //     // Store selection for restoration after updates
+  //     const range = selection.getRangeAt(0)
+  //     // You can add selection preservation logic here if needed
+  //   }
+  // }, [])
 
   // Function to execute rich text formatting commands
   const executeCommand = useCallback((command: string, value?: string) => {
@@ -159,7 +159,7 @@ export default function InlineRichTextEditor({
           try {
             selection.removeAllRanges()
             selection.addRange(range)
-          } catch (e) {
+          } catch (_e) {
             // If range restoration fails, just place cursor at end
             const newRange = document.createRange()
             newRange.selectNodeContents(editorRef.current)

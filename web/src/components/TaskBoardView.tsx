@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, MoreHorizontal, Calendar, User, ExternalLink, Edit, Trash2 } from 'lucide-react'
+import { Plus, MoreHorizontal, Calendar, ExternalLink, Edit, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
 import { useRouter } from 'next/navigation'
@@ -425,9 +425,11 @@ export default function TaskBoardView({ board, project }: TaskBoardViewProps) {
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <div className="flex items-center gap-1">
                       {task.assignee && (
-                        <div className="flex items-center gap-1">
-                          <User className="h-2 w-2" />
-                          <span>{task.assignee.full_name}</span>
+                        <div className="flex items-center gap-1" title={`Assigned to ${task.assignee.full_name}`}>
+                          <div className="w-4 h-4 bg-[var(--color-primary)] rounded-full flex items-center justify-center text-[var(--color-primary-foreground)] text-xs font-medium">
+                            {task.assignee.full_name[0].toUpperCase()}
+                          </div>
+                          <span className="truncate max-w-20">{task.assignee.full_name}</span>
                         </div>
                       )}
                       {task.due_date && (

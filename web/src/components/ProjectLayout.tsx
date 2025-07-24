@@ -9,6 +9,7 @@ import { Database } from '@/types/database.types'
 import dynamic from 'next/dynamic'
 import InputModal from './InputModal'
 import ShareModal from './ShareModal'
+import ProjectMembersModal from './ProjectMembersModal'
 
 const WhiteboardView = dynamic(() => import('./WhiteboardView'), { 
   ssr: false,
@@ -44,6 +45,7 @@ export default function ProjectLayout({ projectId }: ProjectLayoutProps) {
   const [activeTab, setActiveTab] = useState<'whiteboard' | 'tasks'>('whiteboard')
   const [showCreateWhiteboardModal, setShowCreateWhiteboardModal] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
+  const [showMembersModal, setShowMembersModal] = useState(false)
 
   useEffect(() => {
     loadProject()
@@ -226,7 +228,11 @@ export default function ProjectLayout({ projectId }: ProjectLayoutProps) {
             >
               <Share className="h-4 w-4 text-muted-foreground" />
             </button>
-            <button className="p-2 hover:bg-accent rounded-md transition-colors">
+            <button 
+              onClick={() => setShowMembersModal(true)}
+              className="p-2 hover:bg-accent rounded-md transition-colors"
+              title="Project Members"
+            >
               <Users className="h-4 w-4 text-muted-foreground" />
             </button>
             <button className="p-2 hover:bg-accent rounded-md transition-colors">
@@ -310,6 +316,12 @@ export default function ProjectLayout({ projectId }: ProjectLayoutProps) {
           currentBoard={currentBoard || undefined}
         />
       )}
+
+      {/* Project Members Modal */}
+      <ProjectMembersModal
+        isOpen={showMembersModal}
+        onClose={() => setShowMembersModal(false)}
+      />
     </div>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { Database } from '@/types/database.types'
@@ -32,23 +32,16 @@ export default function InvitationPage() {
 
   const supabase = createClient()
 
-  useEffect(() => {
-    checkAuth()
-    if (token) {
-      loadInvitation()
-    }
-  }, [token])
-
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (user?.email) {
       setUser({ id: user.id, email: user.email })
     } else {
       setUser(null)
     }
-  }
+  }, [supabase.auth])
 
-  const loadInvitation = async () => {
+  const loadInvitation = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -113,7 +106,7 @@ export default function InvitationPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [token, supabase])
 
   const acceptInvitation = async () => {
     if (!user) {
@@ -171,6 +164,13 @@ export default function InvitationPage() {
       setAccepting(false)
     }
   }
+
+  useEffect(() => {
+    checkAuth()
+    if (token) {
+      loadInvitation()
+    }
+  }, [token, checkAuth, loadInvitation])
 
   const getResourceName = () => {
     if (invitation?.resource_type === 'project') {

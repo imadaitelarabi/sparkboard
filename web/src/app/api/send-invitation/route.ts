@@ -15,7 +15,6 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 export async function POST(request: NextRequest) {
   try {
     const { 
-      invitationId, 
       recipientEmail, 
       inviterName, 
       resourceName, 

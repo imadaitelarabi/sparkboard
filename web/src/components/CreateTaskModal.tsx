@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { Calendar, Flag, FileText, Eye, Edit3 } from 'lucide-react'
+import { Calendar, Flag, FileText, Eye, Edit3, User } from 'lucide-react'
 import Modal from './Modal'
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store'
@@ -9,6 +9,7 @@ import { Database } from '@/types/database.types'
 import { ElementProperties } from '@/types/element.types'
 import { addTaskToFocusMode } from '@/utils/focusMode'
 import { useToast } from '@/hooks/useToast'
+import { getProjectMembersForAssignment } from '@/utils/projectMembers'
 
 type Tables = Database['public']['Tables']
 type TaskCategory = Tables['task_categories']['Row']
@@ -34,12 +35,14 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
   
   const [loading, setLoading] = useState(false)
   const [categories, setCategories] = useState<TaskCategory[]>([])
+  const [projectMembers, setProjectMembers] = useState<Array<{ id: string; full_name: string }>>([])
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     priority: 'medium' as 'low' | 'medium' | 'high',
     category_id: '',
-    due_date: ''
+    due_date: '',
+    assignee_id: ''
   })
   const [isDescriptionPreview, setIsDescriptionPreview] = useState(false)
 
@@ -134,6 +137,22 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
     }
   }, [currentProject, supabase])
 
+  const loadProjectMembers = useCallback(async () => {
+    if (!currentProject) return
+
+    try {
+      const members = await getProjectMembersForAssignment(
+        currentProject.id,
+        (user as { id: string })?.id,
+        (user as { email: string })?.email
+      )
+      setProjectMembers(members)
+    } catch (error) {
+      console.error('Error loading project members:', error)
+      setProjectMembers([])
+    }
+  }, [currentProject, user])
+
   const extractTextFromElements = useCallback(() => {
     if (selectedElementIds.length === 0) return { title: '', description: '' }
 
@@ -223,6 +242,7 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
   useEffect(() => {
     if (isOpen && currentProject) {
       loadCategories()
+      loadProjectMembers()
       
       // Extract text from selected elements and auto-populate form
       const { title, description } = extractTextFromElements()
@@ -232,10 +252,11 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
         description,
         priority: 'medium',
         category_id: '',
-        due_date: ''
+        due_date: '',
+        assignee_id: ''
       })
     }
-  }, [isOpen, currentProject, loadCategories, extractTextFromElements])
+  }, [isOpen, currentProject, loadCategories, loadProjectMembers, extractTextFromElements])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -253,6 +274,7 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
           priority: formData.priority,
           category_id: formData.category_id || null,
           due_date: formData.due_date || null,
+          assignee_id: formData.assignee_id || null,
           created_by: (user as { id: string })?.id,
           status: 'pending'
         })
@@ -409,6 +431,39 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
               disabled={loading}
             />
           </div>
+        </div>
+
+        {/* Assignee */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium text-[var(--color-card-foreground)]">
+              <User className="h-4 w-4 inline mr-1" />
+              Assign to
+            </label>
+{user ? (
+              <button
+                type="button"
+                onClick={() => setFormData(prev => ({ ...prev, assignee_id: (user as { id: string }).id }))}
+                className="text-xs px-2 py-1 bg-[var(--color-accent)] text-[var(--color-accent-foreground)] rounded hover:bg-[var(--color-accent-600)] transition-colors"
+                disabled={loading}
+              >
+                Assign to me
+              </button>
+            ) : null}
+          </div>
+          <select
+            value={formData.assignee_id}
+            onChange={(e) => setFormData(prev => ({ ...prev, assignee_id: e.target.value }))}
+            className="w-full px-3 py-2 bg-[var(--color-input)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:ring-2 focus:ring-[var(--color-ring)] focus:border-transparent text-sm"
+            disabled={loading}
+          >
+            <option value="">Unassigned</option>
+            {projectMembers.map((member) => (
+              <option key={member.id} value={member.id}>
+                {member.full_name}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Category */}
