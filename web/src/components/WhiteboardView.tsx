@@ -86,6 +86,7 @@ const ImageElement = React.memo(({ element, baseProps }: {
   }
 }) => {
   const [image, setImage] = useState<HTMLImageElement | null>(null)
+  const [currentUrl, setCurrentUrl] = useState<string | null>(null)
   const props = element.properties as ElementProperties || {}
 
   // Use useMemo to prevent image recreation on every render
@@ -96,39 +97,155 @@ const ImageElement = React.memo(({ element, baseProps }: {
       // Import image upload service for URL migration
       const { imageUploadService } = await import('../lib/image-upload')
       
-      // Migrate public URLs to signed URLs
-      const migratedUrl = await imageUploadService.migratePublicUrlToSigned(props.imageUrl!)
-      
-      const img = new window.Image()
-      img.crossOrigin = 'anonymous'
-      
-      return new Promise<HTMLImageElement>((resolve, reject) => {
-        img.onload = () => resolve(img)
-        img.onerror = (e) => {
-          console.error('Failed to load image:', migratedUrl, e)
-          // Try loading without crossOrigin if it fails
-          const imgRetry = new window.Image()
-          imgRetry.onload = () => resolve(imgRetry)
-          imgRetry.onerror = () => {
-            console.error('Failed to load image even without CORS:', migratedUrl)
-            reject(new Error('Failed to load image'))
+      // Helper to check if URL is expired by extracting expiry from signed URL
+      const isUrlExpired = (url: string): boolean => {
+        try {
+          // Check for JWT token in signed URL
+          const tokenMatch = url.match(/token=([^&]+)/)
+          if (tokenMatch) {
+            const token = tokenMatch[1]
+            const payload = JSON.parse(atob(token.split('.')[1]))
+            const now = Math.floor(Date.now() / 1000)
+            return payload.exp && payload.exp < now
           }
-          imgRetry.src = migratedUrl
+          
+          // Check for legacy sign parameter
+          const signMatch = url.match(/[?&]sign=([^&]+)/)
+          if (signMatch) {
+            const expiresMatch = url.match(/[?&]expires=(\d+)/)
+            if (expiresMatch) {
+              const expires = parseInt(expiresMatch[1])
+              return expires < Math.floor(Date.now() / 1000)
+            }
+          }
+        } catch (e) {
+          // If we can't parse, assume it might be expired and refresh
+          return true
         }
-        img.src = migratedUrl
-      })
+        return false
+      }
+
+      // Try to load image with current URL, refresh if expired or failed
+      const loadImageWithRefresh = async (url: string, isRetry = false): Promise<HTMLImageElement> => {
+        // If URL appears expired or this is a retry, get fresh signed URL
+        if (isUrlExpired(url) || isRetry) {
+          if (props.imageStoragePath) {
+            console.log('Refreshing expired image URL for:', props.imageStoragePath)
+            url = await imageUploadService.getSignedUrl(props.imageStoragePath, 86400) // 24 hour expiry
+          } else {
+            // Fallback to migration if no storage path
+            url = await imageUploadService.migratePublicUrlToSigned(url, 86400)
+          }
+        } else {
+          // Migrate public URLs to signed URLs on first load
+          url = await imageUploadService.migratePublicUrlToSigned(url, 86400)
+        }
+        
+        const img = new window.Image()
+        img.crossOrigin = 'anonymous'
+        
+        return new Promise<HTMLImageElement>((resolve, reject) => {
+          img.onload = () => resolve(img)
+          img.onerror = (e) => {
+            console.error('Failed to load image:', url, e)
+            
+            // Try loading without crossOrigin first
+            const imgRetry = new window.Image()
+            imgRetry.onload = () => resolve(imgRetry)
+            imgRetry.onerror = async () => {
+              // If still failing and this isn't already a retry, try refreshing URL
+              if (!isRetry && props.imageStoragePath) {
+                try {
+                  console.log('Retrying with fresh URL after failure')
+                  const freshImg = await loadImageWithRefresh(props.imageUrl!, true)
+                  resolve(freshImg)
+                } catch (retryError) {
+                  console.error('Failed to load image even after URL refresh:', retryError)
+                  reject(new Error('Failed to load image'))
+                }
+              } else {
+                console.error('Failed to load image even without CORS:', url)
+                reject(new Error('Failed to load image'))
+              }
+            }
+            imgRetry.src = url
+          }
+          img.src = url
+        })
+      }
+
+      return loadImageWithRefresh(props.imageUrl!)
     })()
-  }, [props.imageUrl])
+  }, [props.imageUrl, props.imageStoragePath])
 
   useEffect(() => {
     if (imageLoader) {
       imageLoader
-        .then(setImage)
-        .catch(() => setImage(null))
+        .then((img) => {
+          setImage(img)
+          setCurrentUrl(props.imageUrl || null)
+        })
+        .catch(() => {
+          setImage(null)
+          setCurrentUrl(null)
+        })
     } else {
       setImage(null)
+      setCurrentUrl(null)
     }
-  }, [imageLoader])
+  }, [imageLoader, props.imageUrl])
+
+  // Register URL with refresh service and listen for refresh events
+  useEffect(() => {
+    if (!props.imageUrl || !props.imageStoragePath) return
+
+    // Import and register URL with refresh service
+    const setupRefreshService = async () => {
+      const { urlRefreshService } = await import('../lib/url-refresh-service')
+      
+      // Register current URL for proactive refresh
+      urlRefreshService.registerUrl(props.imageUrl!, props.imageStoragePath!, 86400)
+      
+      // Listen for URL refresh events for this specific storage path
+      const handleUrlRefresh = (event: CustomEvent) => {
+        const { oldUrl, newUrl, storagePath } = event.detail
+        
+        if (storagePath === props.imageStoragePath && oldUrl === currentUrl) {
+          console.log(`Updating image URL from ${oldUrl} to ${newUrl}`)
+          
+          // Load the new image
+          const img = new window.Image()
+          img.crossOrigin = 'anonymous'
+          img.onload = () => {
+            setImage(img)
+            setCurrentUrl(newUrl)
+          }
+          img.onerror = () => {
+            console.error('Failed to load refreshed image:', newUrl)
+          }
+          img.src = newUrl
+        }
+      }
+
+      window.addEventListener('imageUrlRefreshed', handleUrlRefresh as EventListener)
+
+      // Cleanup function
+      return () => {
+        urlRefreshService.unregisterUrl(props.imageUrl!)
+        window.removeEventListener('imageUrlRefreshed', handleUrlRefresh as EventListener)
+      }
+    }
+
+    let cleanup: (() => void) | undefined
+
+    setupRefreshService().then((cleanupFn) => {
+      cleanup = cleanupFn
+    })
+
+    return () => {
+      if (cleanup) cleanup()
+    }
+  }, [props.imageUrl, props.imageStoragePath, currentUrl])
 
   if (!image) {
     // Show loading placeholder

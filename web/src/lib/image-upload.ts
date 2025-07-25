@@ -43,10 +43,10 @@ export class ImageUploadService {
       throw new Error(`Failed to upload image: ${error.message}`)
     }
 
-    // Get signed URL for private bucket (expires in 1 hour)
+    // Get signed URL for private bucket (expires in 24 hours)
     const { data: urlData, error: urlError } = await this.supabase.storage
       .from('images')
-      .createSignedUrl(data.path, 3600) // 1 hour expiry
+      .createSignedUrl(data.path, 86400) // 24 hour expiry
 
     if (urlError) {
       throw new Error(`Failed to create signed URL: ${urlError.message}`)
@@ -59,7 +59,7 @@ export class ImageUploadService {
     }
   }
 
-  async getSignedUrl(storagePath: string, expiresIn: number = 3600): Promise<string> {
+  async getSignedUrl(storagePath: string, expiresIn: number = 86400): Promise<string> {
     const { data, error } = await this.supabase.storage
       .from('images')
       .createSignedUrl(storagePath, expiresIn)
@@ -75,7 +75,7 @@ export class ImageUploadService {
    * Migrates old public URLs to signed URLs for existing images
    * Handles URLs that contain the Supabase storage public URL pattern
    */
-  async migratePublicUrlToSigned(url: string, expiresIn: number = 3600): Promise<string> {
+  async migratePublicUrlToSigned(url: string, expiresIn: number = 86400): Promise<string> {
     // Check if this is already a signed URL
     if (url.includes('sign=') || url.includes('token=')) {
       return url
